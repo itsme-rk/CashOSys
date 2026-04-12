@@ -280,18 +280,24 @@ export function subscribeIncomeSources(userId, callback) {
 // BATCH IMPORT (for Excel import)
 // ===========================
 export async function batchImport(userId, collectionName, records) {
-  const batch = writeBatch(db);
   const colRef = userCollection(userId, collectionName);
+  const CHUNK_SIZE = 450;
   
-  records.forEach(record => {
-    const docRef = doc(colRef);
-    batch.set(docRef, {
-      ...record,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+  for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+    const chunk = records.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    
+    chunk.forEach(record => {
+      const docRef = doc(colRef);
+      batch.set(docRef, {
+        ...record,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     });
-  });
+    
+    await batch.commit();
+  }
   
-  await batch.commit();
   return records.length;
 }
