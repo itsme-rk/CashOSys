@@ -1,0 +1,42 @@
+.page { display: flex; flex-direction: column; gap: var(--space-5); }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.header h1 { font-size: 1.75rem; font-weight: 800; }
+.subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: var(--space-1); }
+.toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.searchBox { position: relative; flex: 1; min-width: 200px; }
+.searchBox input { padding-left: 40px; height: 44px; }
+.searchIcon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); }
+.clearBtn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); padding: 4px; border-radius: var(--radius-sm); }
+.clearBtn:hover { color: var(--text-primary); }
+.filterBtn { position: relative; }
+.filterDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); position: absolute; top: 6px; right: 6px; }
+.filterPanel { animation: slideDown var(--transition-fast); }
+.filterRow { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+.filterGroup { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: var(--space-2); }
+.filterGroup label { font-size: 0.75rem; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+.filterGroup select { height: 40px; }
+.list { display: flex; flex-direction: column; gap: var(--space-2); }
+.expenseItem { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); transition: all var(--transition-fast); animation: slideUp var(--transition-base) backwards; }
+.expenseItem:hover { border-color: var(--border-color-hover); box-shadow: var(--card-shadow-hover); }
+.expIcon { width: 44px; height: 44px; border-radius: var(--radius-md); background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+.expDetails { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.expTop { display: flex; align-items: center; gap: var(--space-2); }
+.expCategory { font-size: 0.875rem; font-weight: 700; }
+.expDesc { font-size: 0.8125rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.expMeta { display: flex; align-items: center; gap: var(--space-2); font-size: 0.6875rem; color: var(--text-tertiary); flex-wrap: wrap; }
+.expMeta svg { vertical-align: middle; }
+.expRight { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
+.expAmount { font-size: 1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.expActions { display: flex; gap: var(--space-1); opacity: 0; transition: opacity var(--transition-fast); }
+.expenseItem:hover .expActions { opacity: 1; }
+.actionBtn { padding: var(--space-2); border-radius: var(--radius-sm); color: var(--text-tertiary); }
+.actionBtn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+.deleteBtn:hover { color: var(--error); background: var(--error-bg); }
+.editRow { display: flex; align-items: center; gap: var(--space-2); }
+.editInput { width: 100px; height: 32px; font-size: 0.875rem; text-align: right; }
+
+@media (max-width: 768px) {
+  .header { flex-direction: column; }
+  .expActions { opacity: 1; }
+  .expMeta { display: none; }
+}

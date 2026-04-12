@@ -1,0 +1,80 @@
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--bottom-nav-height);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-color);
+  display: none;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 var(--space-2);
+  z-index: 100;
+  backdrop-filter: blur(20px);
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2);
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 0.625rem;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  position: relative;
+  min-width: 52px;
+}
+
+.navItem.active {
+  color: var(--accent-green);
+}
+
+.navItem span {
+  letter-spacing: 0.02em;
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent-green);
+  position: absolute;
+  bottom: 0;
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.5);
+}
+
+/* Floating Add Button */
+.special {
+  position: relative;
+  top: -12px;
+}
+
+.addButton {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0B0F1A;
+  box-shadow: 0 4px 16px rgba(0, 230, 118, 0.4);
+  transition: all var(--transition-base);
+}
+
+.special:hover .addButton {
+  transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(0, 230, 118, 0.5);
+}
+
+/* Show only on mobile */
+@media (max-width: 768px) {
+  .bottomNav {
+    display: flex;
+  }
+}
