@@ -8,7 +8,7 @@ import OnboardingWizard from '../Onboarding';
 import styles from './AppShell.module.css';
 import { useEffect, useState } from 'react';
 
-const PUBLIC_ROUTES = ['/auth', '/'];
+const PUBLIC_ROUTES = ['/auth'];
 
 export default function AppShell({ children }) {
   const { isAuthenticated, loading, userProfile } = useAuth();
