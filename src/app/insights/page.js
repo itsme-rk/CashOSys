@@ -66,12 +66,13 @@ Be specific with numbers and percentages. Use ₹ for amounts.`;
       if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
         // Generate basic insights without API
         const topCat = Object.entries(catBreakdown).sort((a,b) => b[1]-a[1]);
+        const avgExp = totalExpenses > 0 ? totalExpenses : 1;
         setInsights({
           summary: `You've earned ${formatCurrency(totalIncome)} and spent ${formatCurrency(totalExpenses)} with a ${totalIncome > 0 ? ((totalIncome-totalExpenses)/totalIncome*100).toFixed(1) : 0}% savings rate. Your emergency fund has ${formatCurrency(efBalance)}.`,
-          spending_alerts: topCat.slice(0, 3).map(([cat, amt]) => `${cat} spending: ${formatCurrency(amt)} (${(amt/totalExpenses*100).toFixed(1)}% of total)`),
+          spending_alerts: topCat.slice(0, 3).map(([cat, amt]) => `${cat} spending: ${formatCurrency(amt)} (${totalExpenses > 0 ? (amt/totalExpenses*100).toFixed(1) : 0}% of total)`),
           saving_tips: [
             totalExpenses > totalIncome ? 'Warning: You are spending more than you earn!' : `You are saving ${formatCurrency(totalIncome - totalExpenses)} per cycle`,
-            efBalance > 0 ? `Emergency fund covers ${(efBalance / (totalExpenses || 1) * (Object.keys(catBreakdown).length > 0 ? 1 : 0)).toFixed(1)} months` : 'Consider building an emergency fund'
+            efBalance > 0 ? `Emergency fund covers ~${(efBalance / avgExp).toFixed(1)} months of expenses` : 'Consider building an emergency fund'
           ],
           investment_insights: investments.length > 0 ? [`Portfolio: ${formatCurrency(totalInvested)} across ${investments.length} instruments`] : ['Start investing to grow your wealth'],
           action_items: ['Review top spending categories', 'Set monthly budget limits', 'Automate savings transfers'],
@@ -82,29 +83,58 @@ Be specific with numbers and percentages. Use ₹ for amounts.`;
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+      // Use gemini-2.0-flash (the latest stable model)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       
-      // Parse JSON from response
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      // Parse JSON from response — handle markdown code blocks
+      let parsed = null;
+      // Try extracting from ```json ... ``` blocks first
+      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const rawJson = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+      const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        setInsights(JSON.parse(jsonMatch[0]));
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+          console.warn('JSON parse failed, showing raw text:', parseErr);
+        }
+      }
+      
+      if (parsed) {
+        setInsights(parsed);
       } else {
-        setInsights({ summary: text, spending_alerts: [], saving_tips: [], investment_insights: [], action_items: [] });
+        setInsights({ summary: text.replace(/```[\s\S]*?```/g, '').trim(), spending_alerts: [], saving_tips: [], investment_insights: [], action_items: [] });
       }
     } catch (err) {
-      setError(err.message || 'Failed to generate insights');
-      console.error(err);
+      console.error('AI Insights error:', err);
+      // Provide helpful error messages
+      let errorMsg = 'Failed to generate insights';
+      if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('API key')) {
+        errorMsg = 'Invalid Gemini API key. Please check your API key in Settings.';
+      } else if (err.message?.includes('PERMISSION_DENIED')) {
+        errorMsg = 'API key lacks permission. Enable the Generative Language API in Google Cloud Console.';
+      } else if (err.message?.includes('RESOURCE_EXHAUSTED') || err.message?.includes('quota')) {
+        errorMsg = 'API quota exceeded. Try again later or check your Gemini plan.';
+      } else if (err.message?.includes('404') || err.message?.includes('not found')) {
+        errorMsg = 'Model not available. The Gemini model may need to be updated.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      setError(errorMsg);
     }
     setLoading(false);
   };
 
+  // Auto-generate insights when data is available (with a debounce)
   useEffect(() => {
     if (transactions.length > 0 && !insights && !loading) {
-      generateInsights();
+      // Small delay to let all subscriptions settle
+      const timer = setTimeout(() => generateInsights(), 1500);
+      return () => clearTimeout(timer);
     }
-  }, [transactions.length]);
+  }, [transactions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const iconMap = { spending_alerts: AlertTriangle, saving_tips: Lightbulb, investment_insights: TrendingUp, action_items: Sparkles };
   const colorMap = { spending_alerts: 'var(--error)', saving_tips: 'var(--accent-green)', investment_insights: 'var(--accent-gold)', action_items: 'var(--info)' };

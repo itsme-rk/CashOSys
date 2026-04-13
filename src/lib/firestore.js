@@ -230,10 +230,14 @@ export function subscribeLending(userId, callback) {
 // ===========================
 export async function addWatchlistItem(userId, data) {
   return addDocument(userId, 'watchlist', {
-    ticker: data.ticker,
+    ticker: data.ticker || '',
     name: data.name,
     type: data.type || 'stock',
     alertPrice: Number(data.alertPrice) || 0,
+    targetBuyPrice: Number(data.targetBuyPrice) || 0,
+    whyBuy: data.whyBuy || '',
+    priority: data.priority || 'medium',
+    sector: data.sector || '',
     notes: data.notes || '',
   });
 }
@@ -279,9 +283,16 @@ export function subscribeIncomeSources(userId, callback) {
 // ===========================
 // BATCH IMPORT (for Excel import)
 // ===========================
-export async function batchImport(userId, collectionName, records) {
+export async function batchImport(userId, collectionName, records, onProgress) {
   const colRef = userCollection(userId, collectionName);
-  const CHUNK_SIZE = 450;
+  // Use smaller chunks for faster individual commits and better progress UX
+  const CHUNK_SIZE = 200;
+  let imported = 0;
+  let errors = 0;
+  
+  // Use a local timestamp instead of serverTimestamp() to avoid
+  // per-document server roundtrip cost during batch writes
+  const now = new Date().toISOString();
   
   for (let i = 0; i < records.length; i += CHUNK_SIZE) {
     const chunk = records.slice(i, i + CHUNK_SIZE);
@@ -291,13 +302,31 @@ export async function batchImport(userId, collectionName, records) {
       const docRef = doc(colRef);
       batch.set(docRef, {
         ...record,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: now,
+        updatedAt: now,
+        importedAt: now,
       });
     });
     
-    await batch.commit();
+    try {
+      await batch.commit();
+      imported += chunk.length;
+    } catch (err) {
+      console.error(`Batch import error (${collectionName}, chunk ${i}):`, err);
+      errors += chunk.length;
+    }
+    
+    // Report progress
+    if (onProgress) {
+      onProgress({
+        collection: collectionName,
+        imported,
+        errors,
+        total: records.length,
+        percent: Math.round((imported / records.length) * 100),
+      });
+    }
   }
   
-  return records.length;
+  return { imported, errors };
 }

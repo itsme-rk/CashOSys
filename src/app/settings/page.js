@@ -28,6 +28,7 @@ export default function SettingsPage() {
   // Import state
   const [importData, setImportData] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(null); // { collection, imported, total, percent }
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
 
@@ -99,46 +100,67 @@ export default function SettingsPage() {
     e.target.value = '';
   };
 
-  // Confirm Import
+  // Confirm Import — with real-time progress tracking
   const confirmImport = async () => {
     if (!importData || !user) return;
     setImporting(true);
-    let total = 0;
+    setImportProgress({ collection: 'Starting...', imported: 0, total: importData.summary.total, percent: 0 });
+    
+    let totalImported = 0;
+    let totalErrors = 0;
+    const grandTotal = importData.summary.total;
+
+    const collectionLabel = {
+      transactions: 'Transactions',
+      investments: 'Investments',
+      emergencyFund: 'Emergency Fund',
+      personalLending: 'Personal Lending',
+      loans: 'Loans',
+      goals: 'Goals',
+    };
+
+    const handleProgress = (collName) => (progress) => {
+      setImportProgress({
+        collection: collectionLabel[collName] || collName,
+        imported: totalImported + progress.imported,
+        total: grandTotal,
+        percent: Math.round(((totalImported + progress.imported) / grandTotal) * 100),
+      });
+    };
 
     try {
-      const allTransactions = [...importData.income, ...importData.expenses];
-      if (allTransactions.length) {
-        const count = await batchImport(user.uid, 'transactions', allTransactions);
-        total += count;
-      }
-      if (importData.investments.length) {
-        const count = await batchImport(user.uid, 'investments', importData.investments);
-        total += count;
-      }
-      if (importData.emergencyFund.length) {
-        const count = await batchImport(user.uid, 'emergencyFund', importData.emergencyFund);
-        total += count;
-      }
-      if (importData.lending.length) {
-        const count = await batchImport(user.uid, 'personalLending', importData.lending);
-        total += count;
-      }
-      if (importData.loans.length) {
-        const count = await batchImport(user.uid, 'loans', importData.loans);
-        total += count;
-      }
-      if (importData.goals.length) {
-        const count = await batchImport(user.uid, 'goals', importData.goals);
-        total += count;
+      const importJobs = [
+        { data: [...importData.income, ...importData.expenses], collection: 'transactions' },
+        { data: importData.investments, collection: 'investments' },
+        { data: importData.emergencyFund, collection: 'emergencyFund' },
+        { data: importData.lending, collection: 'personalLending' },
+        { data: importData.loans, collection: 'loans' },
+        { data: importData.goals, collection: 'goals' },
+      ];
+
+      for (const job of importJobs) {
+        if (job.data.length > 0) {
+          setImportProgress(prev => ({ ...prev, collection: collectionLabel[job.collection] }));
+          const result = await batchImport(user.uid, job.collection, job.data, handleProgress(job.collection));
+          totalImported += result.imported;
+          totalErrors += result.errors;
+        }
       }
 
-      setImportResult({ success: true, message: `Successfully imported ${total} records!` });
+      setImportResult({
+        success: true,
+        message: `Successfully imported ${totalImported} records!${totalErrors > 0 ? ` (${totalErrors} errors)` : ''}`,
+      });
       setImportData(null);
     } catch (err) {
       console.error('Import error:', err);
-      setImportResult({ success: false, message: `Import failed: ${err.message}` });
+      setImportResult({
+        success: false,
+        message: `Import partially completed (${totalImported} imported). Error: ${err.message}`,
+      });
     }
     setImporting(false);
+    setImportProgress(null);
   };
 
   // Excel Export — Full data
@@ -413,15 +435,37 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setImportData(null)}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                onClick={confirmImport}
-                disabled={importing || importData.summary.total === 0}
-              >
-                {importing ? 'Importing...' : `Import ${importData.summary.total} Records`}
-              </button>
+            <div className="modal-footer" style={{ flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {importing && importProgress && (
+                <div style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: 6 }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+                      Importing {importProgress.collection}...
+                    </span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent-green)' }}>
+                      {importProgress.percent}%
+                    </span>
+                  </div>
+                  <div className="progress-bar" style={{ height: 8 }}>
+                    <div className="progress-bar-fill" style={{ width: `${importProgress.percent}%`, transition: 'width 0.3s' }} />
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4, textAlign: 'center' }}>
+                    {importProgress.imported} of {importProgress.total} records
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', width: '100%' }}>
+                <button className="btn btn-secondary" onClick={() => setImportData(null)} disabled={importing}>
+                  {importing ? 'Please wait...' : 'Cancel'}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={confirmImport}
+                  disabled={importing || importData.summary.total === 0}
+                >
+                  {importing ? `Importing... ${importProgress?.percent || 0}%` : `Import ${importData.summary.total} Records`}
+                </button>
+              </div>
             </div>
           </div>
         </div>

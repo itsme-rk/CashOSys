@@ -1,10 +1,20 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
+let genAI = null;
+function getGenAI() {
+  if (!genAI) {
+    const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!key || key === 'YOUR_GEMINI_API_KEY_HERE') {
+      throw new Error('Gemini API key not configured. Go to Settings to add it.');
+    }
+    genAI = new GoogleGenerativeAI(key);
+  }
+  return genAI;
+}
 
 export async function getFinancialInsight(prompt) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    const model = getGenAI().getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     return response.text();

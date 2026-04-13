@@ -14,6 +14,8 @@ import {
   Users,
   Shield,
   Brain,
+  BarChart3,
+  Eye,
   Settings,
   LogOut,
   Sun,
@@ -31,11 +33,13 @@ const navItems = [
   { href: '/expenses', icon: Receipt, label: 'Expenses' },
   { href: '/income', icon: Wallet, label: 'Income' },
   { href: '/investments', icon: TrendingUp, label: 'Investments' },
+  { href: '/investments/watchlist', icon: Eye, label: 'Watchlist' },
   { href: '/emergency-fund', icon: Shield, label: 'Emergency Fund' },
   { href: '/goals', icon: Target, label: 'Goals' },
   { href: '/loans', icon: CreditCard, label: 'Loans' },
-  { href: '/lending', icon: Users, label: 'Personal Lending' },
+  { href: '/lending', icon: Users, label: 'Lending' },
   { href: '/insights', icon: Brain, label: 'AI Insights' },
+  { href: '/market', icon: BarChart3, label: 'Market Intel' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -76,7 +80,9 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className={styles.nav}>
         {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+          // Exact match for most routes, but allow nested matching for specific parent routes
+          const isActive = pathname === item.href || 
+            (item.href !== '/investments' && pathname?.startsWith(item.href + '/'));
           const Icon = item.icon;
           return (
             <Link
