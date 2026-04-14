@@ -71,25 +71,29 @@ Be specific with numbers and percentages. Use ₹ for amounts.`;
         } else {
           setInsights({ summary: text.replace(/```[\s\S]*?```/g, '').trim(), spending_alerts: [], saving_tips: [], investment_insights: [], action_items: [] });
         }
-      } catch (err) {
-        console.error('Insights error:', err);
-        setError(err.message || 'Failed to generate insights. Please try again.');
-        
-        // Fallback to basic insights on complete failure
-        const topCat = Object.entries(catBreakdown).sort((a,b) => b[1]-a[1]);
-        const avgExp = totalExpenses > 0 ? totalExpenses : 1;
-        setInsights({
-          summary: `You've earned ${formatCurrency(totalIncome)} and spent ${formatCurrency(totalExpenses)} with a ${totalIncome > 0 ? ((totalIncome-totalExpenses)/totalIncome*100).toFixed(1) : 0}% savings rate. Your emergency fund has ${formatCurrency(efBalance)}.`,
-          spending_alerts: topCat.slice(0, 3).map(([cat, amt]) => `${cat} spending: ${formatCurrency(amt)} (${totalExpenses > 0 ? (amt/totalExpenses*100).toFixed(1) : 0}% of total)`),
-          saving_tips: [
-            totalExpenses > totalIncome ? 'Warning: You are spending more than you earn!' : `You are saving ${formatCurrency(totalIncome - totalExpenses)} per cycle`,
-            efBalance > 0 ? `Emergency fund covers ~${(efBalance / avgExp).toFixed(1)} months of expenses` : 'Consider building an emergency fund'
-          ],
-          investment_insights: investments.length > 0 ? [`Portfolio: ${formatCurrency(totalInvested)} across ${investments.length} instruments`] : ['Start investing to grow your wealth'],
-          action_items: ['Review top spending categories', 'Set monthly budget limits', 'Automate savings transfers'],
-        });
+      } catch (aiErr) {
+        throw aiErr;
       }
-    setLoading(false);
+    } catch (err) {
+      console.error('Insights error:', err);
+      setError(err.message || 'Failed to generate insights. Please try again.');
+      
+      // Fallback to basic insights on complete failure
+      const topCat = Object.entries(catBreakdown).sort((a,b) => b[1]-a[1]);
+      const avgExp = totalExpenses > 0 ? totalExpenses : 1;
+      setInsights({
+        summary: `You've earned ${formatCurrency(totalIncome)} and spent ${formatCurrency(totalExpenses)} with a ${totalIncome > 0 ? ((totalIncome-totalExpenses)/totalIncome*100).toFixed(1) : 0}% savings rate. Your emergency fund has ${formatCurrency(efBalance)}.`,
+        spending_alerts: topCat.slice(0, 3).map(([cat, amt]) => `${cat} spending: ${formatCurrency(amt)} (${totalExpenses > 0 ? (amt/totalExpenses*100).toFixed(1) : 0}% of total)`),
+        saving_tips: [
+          totalExpenses > totalIncome ? 'Warning: You are spending more than you earn!' : `You are saving ${formatCurrency(totalIncome - totalExpenses)} per cycle`,
+          efBalance > 0 ? `Emergency fund covers ~${(efBalance / avgExp).toFixed(1)} months of expenses` : 'Consider building an emergency fund'
+        ],
+        investment_insights: investments.length > 0 ? [`Portfolio: ${formatCurrency(totalInvested)} across ${investments.length} instruments`] : ['Start investing to grow your wealth'],
+        action_items: ['Review top spending categories', 'Set monthly budget limits', 'Automate savings transfers'],
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Auto-generate insights when data is available (with a debounce)

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { updateUserProfile, subscribeIncomeSources, addIncomeSource, deleteDocument, batchImport, getDocuments } from '@/lib/firestore';
+import { updateUserProfile, subscribeIncomeSources, addIncomeSource, deleteDocument, batchImport, getDocuments, clearAllUserData } from '@/lib/firestore';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_SOURCES } from '@/lib/constants';
 import { parseExcelWorkbook, buildExportWorkbook } from '@/lib/excel';
 import { Settings, Sun, Moon, Save, Plus, Trash2, X, Upload, Download, User, CheckCircle, AlertTriangle } from 'lucide-react';
@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [importProgress, setImportProgress] = useState(null); // { collection, imported, total, percent }
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     if (userProfile) {
@@ -62,6 +63,28 @@ export default function SettingsPage() {
       console.error('Error updating profile:', err);
     }
     setProfileSaving(false);
+  };
+
+  const handleClearData = async () => {
+    if (!user) return;
+    const confirmed = window.confirm(
+      "WARNING: This will permanently delete ALL your transactions, investments, goals, watchlist, and other tracked data.\n\nType 'DELETE' to confirm:"
+    );
+    // Use prompt to confirm if they actually want it since window.confirm doesn't allow text input easily, so use prompt instead
+    if (confirmed) {
+      const doubleCheck = window.prompt("Type 'DELETE' to permanently wipe all data.");
+      if (doubleCheck === 'DELETE') {
+        setIsClearing(true);
+        try {
+          await clearAllUserData(user.uid);
+          alert('All your data has been successfully cleared. You can start fresh or import a new file!');
+        } catch (err) {
+          console.error("Failed to clear data:", err);
+          alert("Failed to clear data: " + err.message);
+        }
+        setIsClearing(false);
+      }
+    }
   };
 
   const handleAddSource = async () => {
@@ -390,6 +413,23 @@ export default function SettingsPage() {
               disabled={exporting}
             >
               <Download size={14} /> {exporting ? 'Exporting...' : 'Export'}
+            </button>
+          </div>
+          <div className={styles.dataAction} style={{ marginTop: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <Trash2 size={20} style={{ color: 'var(--error)' }} />
+            <div>
+              <p style={{ fontWeight: 600, color: 'var(--error)' }}>Clear All Data</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                Permanently delete all your subcollections (transactions, investments, etc.)
+              </p>
+            </div>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--error-bg)', color: 'var(--error)' }}
+              onClick={handleClearData}
+              disabled={isClearing}
+            >
+              {isClearing ? 'Clearing...' : 'Clear Data'}
             </button>
           </div>
         </div>

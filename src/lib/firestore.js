@@ -79,6 +79,35 @@ export async function deleteDocument(userId, collectionName, docId) {
   await deleteDoc(docRef);
 }
 
+export async function clearAllUserData(userId) {
+  const collections = ['transactions', 'investments', 'emergencyFund', 'personalLending', 'loans', 'goals', 'watchlist'];
+  
+  for (const collName of collections) {
+    const colRef = userCollection(userId, collName);
+    const snap = await getDocs(colRef);
+    
+    // Firestore batches support up to 500 operations
+    let batch = writeBatch(db);
+    let count = 0;
+    
+    for (const docSnap of snap.docs) {
+      batch.delete(docSnap.ref);
+      count++;
+      
+      if (count === 490) {
+        await batch.commit();
+        batch = writeBatch(db);
+        count = 0;
+      }
+    }
+    
+    if (count > 0) {
+      await batch.commit();
+    }
+  }
+}
+
+
 export async function getDocuments(userId, collectionName, constraints = []) {
   const colRef = userCollection(userId, collectionName);
   const q = constraints.length > 0 ? query(colRef, ...constraints) : query(colRef);
