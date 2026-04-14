@@ -15,6 +15,7 @@ export default function IncomePage() {
   const [editingTx, setEditingTx] = useState(null);
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [selectedCycleId, setSelectedCycleId] = useState('all');
   const [filterMode, setFilterMode] = useState('cycle'); // 'cycle' | 'month'
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -123,18 +124,21 @@ export default function IncomePage() {
       if (newAmt > 0) updates.amount = newAmt;
     }
     if (editCategory) updates.category = editCategory;
+    if (editDate) updates.date = editDate;
     if (Object.keys(updates).length > 0) {
       await updateDocument(user.uid, 'transactions', txId, updates);
     }
     setEditingTx(null);
     setEditAmount('');
     setEditCategory('');
+    setEditDate('');
   };
 
   const startEdit = (t) => {
     setEditingTx(t.id);
     setEditAmount(String(t.amount));
     setEditCategory(t.category || 'Income');
+    setEditDate(t.date || '');
   };
 
   const filterLabel = filterMode === 'cycle'
@@ -343,6 +347,8 @@ export default function IncomePage() {
                 </div>
                 {editingTx === t.id ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+                      style={{ height: 32, fontSize: '0.8125rem', padding: '0 8px' }} />
                     <select value={editCategory} onChange={e => setEditCategory(e.target.value)}
                       style={{ height: 32, fontSize: '0.8125rem', minWidth: 120, padding: '0 8px' }}>
                       <option value="Income">Income</option>
