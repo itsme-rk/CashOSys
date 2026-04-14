@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeTransactions, subscribeIncomeSources, deleteDocument, updateDocument } from '@/lib/firestore';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { getCycleForDate, getAvailableMonths, getCurrentCycle } from '@/lib/salaryCycle';
-import { Wallet, Trash2, Edit2, TrendingUp, Plus, ChevronDown, Activity, Calendar } from 'lucide-react';
+import { Wallet, Trash2, Edit2, TrendingUp, Plus, ChevronDown, Activity, Calendar, Check, X } from 'lucide-react';
 import Link from 'next/link';
 
 export default function IncomePage() {
@@ -14,11 +14,31 @@ export default function IncomePage() {
   const [sources, setSources] = useState([]);
   const [editingTx, setEditingTx] = useState(null);
   const [editAmount, setEditAmount] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [selectedCycleId, setSelectedCycleId] = useState('all');
+  const [filterMode, setFilterMode] = useState('cycle'); // 'cycle' | 'month'
+  const [selectedMonth, setSelectedMonth] = useState('all');
   const [showCycleDropdown, setShowCycleDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay), [salaryCycleDay]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
+
+  // Calendar months from data
+  const calendarMonths = useMemo(() => {
+    const months = new Set();
+    transactions.forEach(t => {
+      if (!t.date) return;
+      const d = new Date(t.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      months.add(key);
+    });
+    return [...months].sort().reverse().map(key => {
+      const [y, m] = key.split('-');
+      const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+      return { id: key, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) };
+    });
+  }, [transactions]);
 
   useEffect(() => {
     if (!user) return;
@@ -27,15 +47,36 @@ export default function IncomePage() {
     return () => { u1(); u2(); };
   }, [user]);
 
-  // Filter by cycle
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowCycleDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Filter
   const filteredTransactions = useMemo(() => {
-    if (selectedCycleId === 'all') return transactions;
-    return transactions.filter(t => {
-      if (!t.date) return false;
-      const cycle = getCycleForDate(t.date, salaryCycleDay);
-      return cycle.id === selectedCycleId;
-    });
-  }, [transactions, selectedCycleId, salaryCycleDay]);
+    if (filterMode === 'cycle' && selectedCycleId !== 'all') {
+      return transactions.filter(t => {
+        if (!t.date) return false;
+        const cycle = getCycleForDate(t.date, salaryCycleDay);
+        return cycle.id === selectedCycleId;
+      });
+    }
+    if (filterMode === 'month' && selectedMonth !== 'all') {
+      return transactions.filter(t => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return key === selectedMonth;
+      });
+    }
+    return transactions;
+  }, [transactions, selectedCycleId, selectedMonth, filterMode, salaryCycleDay]);
 
   const incomeEntries = filteredTransactions.filter(t => t.type === 'income');
   const totalIncome = incomeEntries.reduce((s, t) => s + (t.amount || 0), 0);
@@ -55,7 +96,7 @@ export default function IncomePage() {
     if (src) expensesBySource[src] = (expensesBySource[src] || 0) + (t.amount || 0);
   });
 
-  // Monthly trend data for ALL-TIME (source-wise)
+  // Monthly trend data
   const monthlyBreakdown = useMemo(() => {
     const months = {};
     transactions.forEach(t => {
@@ -72,19 +113,33 @@ export default function IncomePage() {
         months[key].expenses[t.fundingSource] = (months[key].expenses[t.fundingSource] || 0) + (t.amount || 0);
       }
     });
-    return Object.values(months).reverse();
+    return Object.values(months).sort((a, b) => b.id.localeCompare(a.id));
   }, [transactions, salaryCycleDay]);
 
-  const handleEditSave = async (txId, currentAmount) => {
-    const newAmt = parseFloat(editAmount);
-    if (newAmt > 0 && newAmt !== currentAmount) {
-      await updateDocument(user.uid, 'transactions', txId, { amount: newAmt });
+  const handleEditSave = async (txId) => {
+    const updates = {};
+    if (editAmount) {
+      const newAmt = parseFloat(editAmount);
+      if (newAmt > 0) updates.amount = newAmt;
+    }
+    if (editCategory) updates.category = editCategory;
+    if (Object.keys(updates).length > 0) {
+      await updateDocument(user.uid, 'transactions', txId, updates);
     }
     setEditingTx(null);
     setEditAmount('');
+    setEditCategory('');
   };
 
-  const cycleLabel = selectedCycleId === 'all' ? 'All Time' : (availableMonths.find(c => c.id === selectedCycleId)?.label || 'All Time');
+  const startEdit = (t) => {
+    setEditingTx(t.id);
+    setEditAmount(String(t.amount));
+    setEditCategory(t.category || 'Income');
+  };
+
+  const filterLabel = filterMode === 'cycle'
+    ? (selectedCycleId === 'all' ? 'All Time' : (availableMonths.find(c => c.id === selectedCycleId)?.label || 'All Time'))
+    : (selectedMonth === 'all' ? 'All Months' : (calendarMonths.find(m => m.id === selectedMonth)?.label || 'All Months'));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
@@ -92,12 +147,28 @@ export default function IncomePage() {
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Income</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: 4 }}>
-            {cycleLabel} • Total: <span className="currency-positive">{formatCurrency(totalIncome)}</span>
+            {filterLabel} • Total: <span className="currency-positive">{formatCurrency(totalIncome)}</span>
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-          {/* Cycle Selector */}
-          <div style={{ position: 'relative' }}>
+          {/* Filter mode toggle */}
+          <div style={{ display: 'flex', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            <button onClick={() => { setFilterMode('cycle'); setSelectedMonth('all'); }}
+              style={{
+                padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: filterMode === 'cycle' ? 'var(--accent-green)' : 'var(--bg-surface)',
+                color: filterMode === 'cycle' ? '#0B0F1A' : 'var(--text-secondary)',
+              }}>Salary Cycle</button>
+            <button onClick={() => { setFilterMode('month'); setSelectedCycleId('all'); }}
+              style={{
+                padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: filterMode === 'month' ? 'var(--accent-green)' : 'var(--bg-surface)',
+                color: filterMode === 'month' ? '#0B0F1A' : 'var(--text-secondary)',
+              }}>Calendar Month</button>
+          </div>
+
+          {/* Dropdown selector */}
+          <div style={{ position: 'relative' }} ref={dropdownRef}>
             <button
               onClick={() => setShowCycleDropdown(!showCycleDropdown)}
               style={{
@@ -105,46 +176,44 @@ export default function IncomePage() {
                 padding: '8px 16px', background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.875rem',
                 cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-            >
+              }}>
               <Activity size={16} />
-              {cycleLabel}
-              <ChevronDown size={16} />
+              {filterLabel}
+              <ChevronDown size={16} style={{ transform: showCycleDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
             </button>
             {showCycleDropdown && (
               <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0,
                 background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', zIndex: 50,
-                maxHeight: 300, overflowY: 'auto', minWidth: 180,
+                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', zIndex: 100,
+                maxHeight: 320, overflowY: 'auto', minWidth: 200, padding: '4px 0',
               }}>
                 <button
-                  onClick={() => { setSelectedCycleId('all'); setShowCycleDropdown(false); }}
+                  onClick={() => { filterMode === 'cycle' ? setSelectedCycleId('all') : setSelectedMonth('all'); setShowCycleDropdown(false); }}
                   style={{
                     display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left',
-                    fontSize: '0.875rem', fontWeight: selectedCycleId === 'all' ? 700 : 500,
-                    color: selectedCycleId === 'all' ? 'var(--accent-green)' : 'var(--text-secondary)',
-                    background: selectedCycleId === 'all' ? 'var(--success-bg)' : 'transparent',
-                    border: 'none', cursor: 'pointer',
-                  }}
-                >
-                  All Time
+                    fontSize: '0.875rem', fontWeight: 700,
+                    color: 'var(--accent-green)', background: 'transparent', border: 'none', cursor: 'pointer',
+                  }}>
+                  {filterMode === 'cycle' ? 'All Time' : 'All Months'}
                 </button>
-                {availableMonths.map(cycle => (
-                  <button
-                    key={cycle.id}
-                    onClick={() => { setSelectedCycleId(cycle.id); setShowCycleDropdown(false); }}
-                    style={{
-                      display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left',
-                      fontSize: '0.875rem', fontWeight: selectedCycleId === cycle.id ? 700 : 500,
-                      color: selectedCycleId === cycle.id ? 'var(--accent-green)' : 'var(--text-secondary)',
-                      background: selectedCycleId === cycle.id ? 'var(--success-bg)' : 'transparent',
-                      border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    {cycle.label}
-                  </button>
-                ))}
+                {(filterMode === 'cycle' ? availableMonths : calendarMonths).map(item => {
+                  const isActive = filterMode === 'cycle' ? selectedCycleId === item.id : selectedMonth === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { filterMode === 'cycle' ? setSelectedCycleId(item.id) : setSelectedMonth(item.id); setShowCycleDropdown(false); }}
+                      style={{
+                        display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left',
+                        fontSize: '0.875rem', fontWeight: isActive ? 700 : 500,
+                        color: isActive ? 'var(--accent-green)' : 'var(--text-secondary)',
+                        background: isActive ? 'var(--success-bg)' : 'transparent',
+                        border: 'none', cursor: 'pointer',
+                      }}>
+                      {item.label}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -166,7 +235,7 @@ export default function IncomePage() {
                 </div>
                 <div>
                   <div style={{ fontSize: '1.125rem', fontWeight: 800 }}>{source}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{data.entries.length} entries • {cycleLabel}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{data.entries.length} entries • {filterLabel}</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, textAlign: 'center' }}>
@@ -195,14 +264,14 @@ export default function IncomePage() {
         {Object.keys(bySource).length === 0 && (
           <div className="card empty-state" style={{ gridColumn: '1 / -1' }}>
             <Wallet size={40} />
-            <h3>No income entries {selectedCycleId !== 'all' ? 'this cycle' : ''}</h3>
+            <h3>No income entries {filterLabel !== 'All Time' && filterLabel !== 'All Months' ? 'for this period' : ''}</h3>
             <Link href="/add" className="btn btn-primary">Add Income</Link>
           </div>
         )}
       </div>
 
       {/* Monthly Breakdown Table */}
-      {selectedCycleId === 'all' && monthlyBreakdown.length > 0 && (
+      {((filterMode === 'cycle' && selectedCycleId === 'all') || (filterMode === 'month' && selectedMonth === 'all')) && monthlyBreakdown.length > 0 && (
         <div className="card">
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Calendar size={18} style={{ color: 'var(--text-tertiary)' }} />
@@ -219,13 +288,11 @@ export default function IncomePage() {
                 </tr>
                 <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <th></th>
-                  {['Income', 'Income 2.0'].map(src => (
-                    <>
-                      <th key={`${src}-e`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--accent-green)', borderLeft: '1px solid var(--border-color)' }}>Earned</th>
-                      <th key={`${src}-s`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--error)' }}>Spent</th>
-                      <th key={`${src}-r`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--accent-gold)' }}>Balance</th>
-                    </>
-                  ))}
+                  {['Income', 'Income 2.0'].map(src => [
+                    <th key={`${src}-e`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--accent-green)', borderLeft: '1px solid var(--border-color)' }}>Earned</th>,
+                    <th key={`${src}-s`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--error)' }}>Spent</th>,
+                    <th key={`${src}-r`} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600, fontSize: '0.625rem', color: 'var(--accent-gold)' }}>Balance</th>,
+                  ])}
                 </tr>
               </thead>
               <tbody>
@@ -236,13 +303,11 @@ export default function IncomePage() {
                       const earned = month.income[src] || 0;
                       const spent = month.expenses[src] || 0;
                       const balance = earned - spent;
-                      return (
-                        <>
-                          <td key={`${src}-e`} style={{ textAlign: 'right', padding: '10px 8px', color: 'var(--accent-green)', fontWeight: 600, borderLeft: '1px solid var(--border-color)' }}>{earned > 0 ? formatCurrency(earned) : '—'}</td>
-                          <td key={`${src}-s`} style={{ textAlign: 'right', padding: '10px 8px', color: 'var(--error)', fontWeight: 600 }}>{spent > 0 ? formatCurrency(spent) : '—'}</td>
-                          <td key={`${src}-r`} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 800, color: balance >= 0 ? 'var(--accent-green)' : 'var(--error)' }}>{earned > 0 || spent > 0 ? formatCurrency(balance) : '—'}</td>
-                        </>
-                      );
+                      return [
+                        <td key={`${month.id}-${src}-e`} style={{ textAlign: 'right', padding: '10px 8px', color: 'var(--accent-green)', fontWeight: 600, borderLeft: '1px solid var(--border-color)' }}>{earned > 0 ? formatCurrency(earned) : '—'}</td>,
+                        <td key={`${month.id}-${src}-s`} style={{ textAlign: 'right', padding: '10px 8px', color: 'var(--error)', fontWeight: 600 }}>{spent > 0 ? formatCurrency(spent) : '—'}</td>,
+                        <td key={`${month.id}-${src}-r`} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 800, color: balance >= 0 ? 'var(--accent-green)' : 'var(--error)' }}>{earned > 0 || spent > 0 ? formatCurrency(balance) : '—'}</td>,
+                      ];
                     })}
                   </tr>
                 ))}
@@ -266,22 +331,37 @@ export default function IncomePage() {
                   <TrendingUp size={16} style={{ color: 'var(--accent-green)' }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{t.category || t.description}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {t.category || t.description}
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                      {t.category === 'Income 2.0' ? '2.0' : ''}
+                    </span>
+                  </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                     {formatDate(t.date, 'medium')} {t.salaryCycleLabel ? `• ${t.salaryCycleLabel}` : ''}
                   </div>
                 </div>
                 {editingTx === t.id ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="number" value={editAmount} onChange={e => setEditAmount(e.target.value)} style={{ width: 100, height: 32, fontSize: '0.875rem', textAlign: 'right' }} autoFocus />
-                    <button className="btn btn-primary btn-sm" onClick={() => handleEditSave(t.id, t.amount)}>Save</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditingTx(null)}>✕</button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select value={editCategory} onChange={e => setEditCategory(e.target.value)}
+                      style={{ height: 32, fontSize: '0.8125rem', minWidth: 120, padding: '0 8px' }}>
+                      <option value="Income">Income</option>
+                      <option value="Income 2.0">Income 2.0</option>
+                    </select>
+                    <input type="number" value={editAmount} onChange={e => setEditAmount(e.target.value)}
+                      style={{ width: 100, height: 32, fontSize: '0.875rem', textAlign: 'right' }} autoFocus />
+                    <button className="btn btn-primary btn-sm" onClick={() => handleEditSave(t.id)} style={{ height: 32, padding: '0 12px' }}>
+                      <Check size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditingTx(null)} style={{ height: 32, padding: '0 8px' }}>
+                      <X size={14} />
+                    </button>
                   </div>
                 ) : (
                   <>
                     <div className="currency-positive" style={{ fontWeight: 800 }}>+{formatCurrency(t.amount)}</div>
                     <button style={{ color: 'var(--text-tertiary)', padding: 4 }}
-                      onClick={() => { setEditingTx(t.id); setEditAmount(String(t.amount)); }}>
+                      onClick={() => startEdit(t)}>
                       <Edit2 size={14} />
                     </button>
                     <button style={{ color: 'var(--text-tertiary)', padding: 4 }}
@@ -296,7 +376,7 @@ export default function IncomePage() {
         ) : (
           <div className="empty-state">
             <Wallet size={40} />
-            <h3>No income entries {selectedCycleId !== 'all' ? 'this cycle' : ''}</h3>
+            <h3>No income entries {filterLabel !== 'All Time' && filterLabel !== 'All Months' ? 'for this period' : ''}</h3>
             <Link href="/add" className="btn btn-primary">Add Income</Link>
           </div>
         )}

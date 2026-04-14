@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { subscribeInvestments, addInvestment, deleteDocument } from '@/lib/firestore';
+import { subscribeInvestments, addInvestment, deleteDocument, updateDocument } from '@/lib/firestore';
 import { formatCurrency, formatPercent, DEFAULT_INVESTMENT_BUCKETS } from '@/lib/constants';
-import { Plus, Trash2, X, PieChart as PieIcon, Eye } from 'lucide-react';
+import { Plus, Trash2, X, PieChart as PieIcon, Eye, ArrowDownRight, Minus } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import Link from 'next/link';
 
@@ -14,6 +14,8 @@ export default function InvestmentsPage() {
   const { user } = useAuth();
   const [investments, setInvestments] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(null); // investment id
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [form, setForm] = useState({ bucket: '', instrumentName: '', investedAmount: '', ticker: '', purchaseDate: '', description: '', fundingSource: '' });
 
   useEffect(() => {
@@ -21,27 +23,68 @@ export default function InvestmentsPage() {
     return subscribeInvestments(user.uid, setInvestments);
   }, [user]);
 
-  const totalInvested = investments.reduce((s, i) => s + (i.investedAmount || 0) - (i.withdrawal || 0), 0);
+  const totalInvested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0);
+  const totalWithdrawn = investments.reduce((s, i) => s + (i.withdrawal || 0), 0);
+  const netInvested = totalInvested - totalWithdrawn;
   const totalCurrent = investments.reduce((s, i) => s + (i.currentValue || i.investedAmount || 0), 0);
-  const totalGain = totalCurrent - totalInvested;
-  const gainPct = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+  const totalGain = totalCurrent - netInvested;
+  const gainPct = netInvested > 0 ? (totalGain / netInvested) * 100 : 0;
 
   const buckets = {};
   investments.forEach(i => {
     const b = i.bucket || 'Other';
-    if (!buckets[b]) buckets[b] = { invested: 0, current: 0, items: [] };
-    buckets[b].invested += (i.investedAmount || 0) - (i.withdrawal || 0);
-    buckets[b].current += i.currentValue || i.investedAmount || 0;
+    if (!buckets[b]) buckets[b] = { invested: 0, withdrawn: 0, current: 0, items: [] };
+    buckets[b].invested += (i.investedAmount || 0);
+    buckets[b].withdrawn += (i.withdrawal || 0);
+    buckets[b].current += i.currentValue || (i.investedAmount || 0) - (i.withdrawal || 0);
     buckets[b].items.push(i);
   });
 
-  const pieData = Object.entries(buckets).map(([name, data]) => ({ name, value: data.current }));
+  const pieData = Object.entries(buckets)
+    .map(([name, data]) => ({ name, value: Math.max(0, data.current) }))
+    .filter(d => d.value > 0);
 
   const handleAdd = async (e) => {
     e.preventDefault();
     await addInvestment(user.uid, { ...form, investedAmount: parseFloat(form.investedAmount), currentValue: parseFloat(form.investedAmount) });
     setForm({ bucket: '', instrumentName: '', investedAmount: '', ticker: '', purchaseDate: '', description: '', fundingSource: '' });
     setShowAdd(false);
+  };
+
+  const handleWithdraw = async (investmentId) => {
+    const amt = parseFloat(withdrawAmount);
+    if (!amt || amt <= 0) return;
+    const inv = investments.find(i => i.id === investmentId);
+    if (!inv) return;
+    const newWithdrawal = (inv.withdrawal || 0) + amt;
+    const newCurrentValue = Math.max(0, (inv.currentValue || inv.investedAmount || 0) - amt);
+    await updateDocument(user.uid, 'investments', investmentId, {
+      withdrawal: newWithdrawal,
+      currentValue: newCurrentValue,
+    });
+    setShowWithdraw(null);
+    setWithdrawAmount('');
+  };
+
+  const handleBulkWithdraw = async (bucketName) => {
+    const amt = parseFloat(prompt(`Enter total withdrawal amount from ${bucketName}:`));
+    if (!amt || amt <= 0) return;
+    const items = buckets[bucketName]?.items || [];
+    if (items.length === 0) return;
+    // Distribute withdrawal across items in this bucket proportionally
+    const totalBucketValue = items.reduce((s, i) => s + ((i.currentValue || i.investedAmount || 0) - (i.withdrawal || 0)), 0);
+    if (totalBucketValue <= 0) return;
+
+    for (const item of items) {
+      const itemValue = (item.currentValue || item.investedAmount || 0) - (item.withdrawal || 0);
+      const share = (itemValue / totalBucketValue) * amt;
+      if (share > 0) {
+        await updateDocument(user.uid, 'investments', item.id, {
+          withdrawal: (item.withdrawal || 0) + share,
+          currentValue: Math.max(0, (item.currentValue || item.investedAmount || 0) - share),
+        });
+      }
+    }
   };
 
   return (
@@ -57,7 +100,8 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-4)' }}>
         <div className="card" style={{ borderColor: totalGain >= 0 ? 'rgba(0,230,118,0.15)' : 'rgba(255,77,79,0.15)' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Value</div>
           <div className={totalGain >= 0 ? 'currency-positive' : 'currency-negative'} style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: 4 }}>{formatCurrency(totalCurrent)}</div>
@@ -65,6 +109,10 @@ export default function InvestmentsPage() {
         <div className="card">
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Invested</div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: 4 }}>{formatCurrency(totalInvested)}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Withdrawn</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: 4, color: 'var(--accent-gold)' }}>{formatCurrency(totalWithdrawn)}</div>
         </div>
         <div className="card">
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Gain / Loss</div>
@@ -75,41 +123,96 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 300px) 1fr', gap: 'var(--space-4)' }}>
+      {/* Pie Chart + Bucket Legend */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 350px) 1fr', gap: 'var(--space-4)' }}>
         <div className="card">
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-4)', display: 'flex', gap: 8, alignItems:'center' }}><PieIcon size={16} /> Allocation</h3>
           {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value">
-                {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie><Tooltip formatter={v => formatCurrency(v)} /></PieChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value">
+                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie><Tooltip formatter={v => formatCurrency(v)} /></PieChart>
+              </ResponsiveContainer>
+              {/* Legend below pie chart */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'var(--space-4)', borderTop: '1px solid var(--border-color)', paddingTop: 'var(--space-4)' }}>
+                {pieData.map((item, idx) => {
+                  const pct = totalCurrent > 0 ? ((item.value / totalCurrent) * 100).toFixed(1) : 0;
+                  return (
+                    <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[idx % COLORS.length], flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{item.name}</span>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 700 }}>{formatCurrency(item.value)}</span>
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)', minWidth: 40, textAlign: 'right' }}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : <div className="empty-state"><p>No data</p></div>}
         </div>
 
+        {/* Bucket cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {Object.entries(buckets).map(([name, data], idx) => {
-            const gain = data.current - data.invested;
-            const pct = data.invested > 0 ? (gain / data.invested) * 100 : 0;
+            const net = data.invested - data.withdrawn;
+            const gain = data.current - net;
+            const pct = net > 0 ? (gain / net) * 100 : 0;
             return (
               <div key={name} className="card card-compact">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 8, height: 32, borderRadius: 4, background: COLORS[idx % COLORS.length] }} />
-                    <div><div style={{ fontWeight: 700 }}>{name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{data.items.length} holdings</div></div>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                        {data.items.length} holdings
+                        {data.withdrawn > 0 && <span style={{ color: 'var(--accent-gold)' }}> • ₹{data.withdrawn.toLocaleString()} withdrawn</span>}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1.0625rem' }}>{formatCurrency(data.current)}</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: gain >= 0 ? 'var(--accent-green)' : 'var(--error)' }}>{formatCurrency(gain, true)} ({formatPercent(pct)})</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1.0625rem' }}>{formatCurrency(data.current)}</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: gain >= 0 ? 'var(--accent-green)' : 'var(--error)' }}>{formatCurrency(gain, true)} ({formatPercent(pct)})</div>
+                    </div>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleBulkWithdraw(name)} title="Bulk withdraw from this bucket"
+                      style={{ color: 'var(--accent-gold)', padding: '4px 8px', fontSize: '0.6875rem' }}>
+                      <Minus size={14} />
+                    </button>
                   </div>
                 </div>
                 <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
                   {data.items.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.8125rem' }}>
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.8125rem', alignItems: 'center' }}>
                       <span style={{ color: 'var(--text-secondary)' }}>{item.instrumentName || item.description}</span>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <span style={{ fontWeight: 600 }}>{formatCurrency(item.investedAmount)}</span>
-                        <button style={{ color: 'var(--text-tertiary)', padding: 2 }} onClick={() => { if (confirm('Delete?')) deleteDocument(user.uid, 'investments', item.id); }}><Trash2 size={12} /></button>
+                        {(item.withdrawal || 0) > 0 && (
+                          <span style={{ fontSize: '0.6875rem', color: 'var(--accent-gold)' }}>-{formatCurrency(item.withdrawal)}</span>
+                        )}
+                        {showWithdraw === item.id ? (
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)}
+                              placeholder="₹" style={{ width: 80, height: 28, fontSize: '0.75rem', textAlign: 'right' }} autoFocus />
+                            <button className="btn btn-primary btn-sm" style={{ height: 28, padding: '0 8px', fontSize: '0.6875rem' }}
+                              onClick={() => handleWithdraw(item.id)}>OK</button>
+                            <button className="btn btn-ghost btn-sm" style={{ height: 28, padding: '0 6px' }}
+                              onClick={() => { setShowWithdraw(null); setWithdrawAmount(''); }}><X size={12} /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <button style={{ color: 'var(--accent-gold)', padding: 2 }}
+                              onClick={() => { setShowWithdraw(item.id); setWithdrawAmount(''); }}
+                              title="Withdraw">
+                              <ArrowDownRight size={14} />
+                            </button>
+                            <button style={{ color: 'var(--text-tertiary)', padding: 2 }}
+                              onClick={() => { if (confirm('Delete?')) deleteDocument(user.uid, 'investments', item.id); }}>
+                              <Trash2 size={12} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -120,6 +223,7 @@ export default function InvestmentsPage() {
         </div>
       </div>
 
+      {/* Add Investment Modal */}
       {showAdd && (
         <div className="modal-overlay" onClick={() => setShowAdd(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>

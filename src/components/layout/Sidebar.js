@@ -45,7 +45,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { signOut, user } = useAuth();
+  const { signOut, user, userProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -107,12 +107,16 @@ export default function Sidebar() {
         </button>
 
         <div className={styles.userSection}>
-          <div className={styles.userAvatar}>
-            {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
+          <div className={styles.userAvatar} style={{ overflow: 'hidden' }}>
+            {userProfile?.photoURL ? (
+              <img src={userProfile.photoURL} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
+            )}
           </div>
           {!collapsed && (
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{user?.displayName || 'User'}</span>
+              <span className={styles.userName}>{userProfile?.displayName || user?.displayName || 'User'}</span>
               <span className={styles.userEmail}>{user?.email}</span>
             </div>
           )}

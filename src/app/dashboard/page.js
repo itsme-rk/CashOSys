@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   subscribeTransactions,
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [incomeSources, setIncomeSources] = useState([]);
   const [selectedCycleId, setSelectedCycleId] = useState(null);
   const [showCycleDropdown, setShowCycleDropdown] = useState(false);
+  const cycleDropdownRef = useRef(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
 
@@ -78,8 +79,19 @@ export default function DashboardPage() {
     }
   }, [salaryCycleDay, selectedCycleId]);
 
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay), [salaryCycleDay]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
   const currentCycle = availableMonths.find(c => c.id === selectedCycleId) || getCurrentCycle(salaryCycleDay);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (cycleDropdownRef.current && !cycleDropdownRef.current.contains(e.target)) {
+        setShowCycleDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Computed metrics
   const metrics = useMemo(() => {
@@ -203,14 +215,14 @@ export default function DashboardPage() {
         </div>
         
         {/* Cycle Selector */}
-        <div className={styles.cycleSelector}>
+        <div className={styles.cycleSelector} ref={cycleDropdownRef}>
           <button
             className={styles.cycleSelectorBtn}
             onClick={() => setShowCycleDropdown(!showCycleDropdown)}
           >
             <Activity size={16} />
             <span>{currentCycle.label}</span>
-            <ChevronDown size={16} />
+            <ChevronDown size={16} style={{ transform: showCycleDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
           {showCycleDropdown && (
             <div className={styles.cycleDropdown}>

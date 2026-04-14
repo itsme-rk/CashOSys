@@ -16,6 +16,7 @@ export default function SettingsPage() {
 
   // Profile form
   const [displayName, setDisplayName] = useState('');
+  const [photoURL, setPhotoURL] = useState('');
   const [salaryCycleDay, setSalaryCycleDay] = useState(28);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (userProfile) {
       setDisplayName(userProfile.displayName || '');
+      setPhotoURL(userProfile.photoURL || '');
       setSalaryCycleDay(userProfile.salaryCycleDay || 28);
     }
   }, [userProfile]);
@@ -50,6 +52,7 @@ export default function SettingsPage() {
     try {
       await updateUserProfile(user.uid, {
         displayName,
+        photoURL,
         salaryCycleDay: parseInt(salaryCycleDay),
       });
       await refreshProfile();
@@ -219,6 +222,28 @@ export default function SettingsPage() {
           <div className="input-group">
             <label>Email</label>
             <input type="email" value={user?.email || ''} disabled style={{ opacity: 0.6 }} />
+          </div>
+          <div className="input-group">
+            <label>Profile Picture URL</label>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ 
+                width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-secondary)', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' 
+              }}>
+                {photoURL ? (
+                  <img src={photoURL} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <User size={24} style={{ color: 'var(--text-tertiary)' }} />
+                )}
+              </div>
+              <input
+                type="text"
+                value={photoURL}
+                onChange={(e) => setPhotoURL(e.target.value)}
+                placeholder="https://example.com/photo.png"
+                style={{ flex: 1 }}
+              />
+            </div>
           </div>
           <div className="input-group">
             <label>Salary Cycle Day</label>

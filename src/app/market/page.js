@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeInvestments, subscribeWatchlist } from '@/lib/firestore';
 import { formatCurrency } from '@/lib/constants';
+import { callAI, parseAIJson } from '@/lib/ai';
 import { Brain, TrendingUp, TrendingDown, Shield, AlertTriangle, Sparkles, RefreshCw, Newspaper, Target, Search } from 'lucide-react';
 
 export default function MarketIntelligencePage() {
@@ -81,25 +82,22 @@ Provide analysis in this exact JSON format:
 
 Focus on Indian markets (NSE/BSE). Be specific about sectors, entry points, and reasoning. Consider diversification, risk management, and long-term growth.`;
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-
-      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const rawJson = codeBlockMatch ? codeBlockMatch[1].trim() : text;
-      const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        setAnalysis(JSON.parse(jsonMatch[0]));
-      } else {
+      try {
+        const text = await callAI(prompt);
+        const parsed = parseAIJson(text);
+        if (parsed) {
+          setAnalysis(parsed);
+        } else {
+          setAnalysis(getOfflineAnalysis());
+        }
+      } catch (err) {
+        console.error('Market analysis error:', err);
+        setError(err.message || 'Failed to analyze portfolio');
         setAnalysis(getOfflineAnalysis());
       }
-    } catch (err) {
-      console.error('Market analysis error:', err);
-      setError(err.message || 'Failed to analyze portfolio');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const searchStock = async () => {
@@ -119,25 +117,24 @@ Focus on Indian markets (NSE/BSE). Be specific about sectors, entry points, and 
         return;
       }
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      const result = await model.generateContent(
-        `You are an Indian stock market expert. Give a brief investment analysis for "${searchQuery}" (Indian market context). 
+      try {
+        const text = await callAI(
+          `You are an Indian stock market expert. Give a brief investment analysis for "${searchQuery}" (Indian market context). 
 Include: what is it, current sentiment, whether to invest, risk level, and a brief outlook. 
 Reply in JSON: {"name": "...", "ticker": "...", "type": "stock/etf/mf", "summary": "...", "recommendation": "BUY/HOLD/AVOID", "risk_level": "low/medium/high", "key_points": ["point1", "point2"], "outlook": "..."}`
-      );
-      const text = result.response.text();
-      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const rawJson = codeBlockMatch ? codeBlockMatch[1].trim() : text;
-      const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        setSearchResult(JSON.parse(jsonMatch[0]));
+        );
+        const parsed = parseAIJson(text);
+        if (parsed) {
+          setSearchResult(parsed);
+        } else {
+          setError('Could not interpret AI response');
+        }
+      } catch (err) {
+        setError(err.message);
       }
-    } catch (err) {
-      setError(err.message);
+    } finally {
+      setSearchLoading(false);
     }
-    setSearchLoading(false);
   };
 
   function getOfflineAnalysis() {

@@ -393,16 +393,30 @@ function parseExcelDate(value, XLSX) {
   }
   
   // String date
+  // Standard JS Date parse (handles YYYY-MM-DD directly well)
   const d = new Date(value);
   if (!isNaN(d.getTime())) return d;
   
-  // Try DD/MM/YYYY or DD-MM-YYYY
-  const parts = value.split(/[\/\-]/);
-  if (parts.length === 3) {
-    const day = parseInt(parts[0]);
-    const month = parseInt(parts[1]) - 1;
-    const year = parseInt(parts[2]);
-    return new Date(year, month, day);
+  // Custom manual parsing for DD/MM/YYYY or DD-MM-YYYY
+  if (typeof value === 'string') {
+    const parts = value.split(/[\/\-]/);
+    if (parts.length === 3) {
+      const p1 = parseInt(parts[0], 10);
+      const p2 = parseInt(parts[1], 10);
+      const p3 = parseInt(parts[2], 10);
+      
+      if (p1 > 1000) {
+        // YYYY-MM-DD
+        return new Date(p1, p2 - 1, p3);
+      } else if (p3 > 1000) {
+        // DD-MM-YYYY (or MM/DD/YYYY if p2 > 12 context, but assuming DD-MM-YYYY)
+        if (p2 > 12) {
+          // MM/DD/YYYY
+          return new Date(p3, p1 - 1, p2);
+        }
+        return new Date(p3, p2 - 1, p1);
+      }
+    }
   }
   
   return new Date();

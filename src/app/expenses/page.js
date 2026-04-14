@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeTransactions, deleteDocument } from '@/lib/firestore';
 import { getCycleForDate, getAvailableMonths } from '@/lib/salaryCycle';
@@ -26,7 +26,24 @@ export default function ExpensesPage() {
   const [editingTx, setEditingTx] = useState(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay), [salaryCycleDay]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
+  const [filterMonth, setFilterMonth] = useState('');
+  const filterPanelRef = useRef(null);
+
+  // Calendar months from data
+  const calendarMonths = useMemo(() => {
+    const months = new Set();
+    transactions.forEach(t => {
+      if (!t.date || t.type !== 'expense') return;
+      const d = new Date(t.date);
+      months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    });
+    return [...months].sort().reverse().map(key => {
+      const [y, m] = key.split('-');
+      const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+      return { id: key, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) };
+    });
+  }, [transactions]);
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +68,13 @@ export default function ExpensesPage() {
         return cycle.id === filterCycleId;
       });
     }
+    if (filterMonth) {
+      filtered = filtered.filter(t => {
+        const d = new Date(t.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return key === filterMonth;
+      });
+    }
 
     filtered.sort((a, b) => {
       if (sortBy === 'date') {
@@ -65,7 +89,7 @@ export default function ExpensesPage() {
     });
 
     return filtered;
-  }, [transactions, searchTerm, filterCategory, filterSource, filterCycleId, sortBy, sortDir, salaryCycleDay]);
+  }, [transactions, searchTerm, filterCategory, filterSource, filterCycleId, filterMonth, sortBy, sortDir, salaryCycleDay]);
 
   const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
   const categories = [...new Set(transactions.filter(t => t.type === 'expense').map(t => t.category).filter(Boolean))];
@@ -150,16 +174,23 @@ export default function ExpensesPage() {
             </div>
             <div className={styles.filterGroup}>
               <label>Salary Cycle</label>
-              <select value={filterCycleId} onChange={(e) => setFilterCycleId(e.target.value)}>
+              <select value={filterCycleId} onChange={(e) => { setFilterCycleId(e.target.value); setFilterMonth(''); }}>
                 <option value="">All Cycles</option>
                 {availableMonths.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
+            <div className={styles.filterGroup}>
+              <label>Calendar Month</label>
+              <select value={filterMonth} onChange={(e) => { setFilterMonth(e.target.value); setFilterCycleId(''); }}>
+                <option value="">All Months</option>
+                {calendarMonths.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
           </div>
-          {(filterCategory || filterSource || filterCycleId) && (
+          {(filterCategory || filterSource || filterCycleId || filterMonth) && (
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => { setFilterCategory(''); setFilterSource(''); setFilterCycleId(''); }}
+              onClick={() => { setFilterCategory(''); setFilterSource(''); setFilterCycleId(''); setFilterMonth(''); }}
             >
               Clear all filters
             </button>
