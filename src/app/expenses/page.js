@@ -26,7 +26,13 @@ export default function ExpensesPage() {
   const [editingTx, setEditingTx] = useState(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
+  const incomeDates = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income' && t.category === 'Income' && t.date)
+      .map(t => new Date(t.date).toISOString())
+      .sort();
+  }, [transactions]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay, incomeDates).reverse(), [salaryCycleDay, incomeDates]);
   const [filterMonth, setFilterMonth] = useState('');
   const filterPanelRef = useRef(null);
 
@@ -64,7 +70,7 @@ export default function ExpensesPage() {
     if (filterSource) filtered = filtered.filter(t => t.fundingSource === filterSource);
     if (filterCycleId) {
       filtered = filtered.filter(t => {
-        const cycle = getCycleForDate(t.date, salaryCycleDay);
+        const cycle = getCycleForDate(t.date, salaryCycleDay, incomeDates);
         return cycle.id === filterCycleId;
       });
     }
@@ -89,7 +95,7 @@ export default function ExpensesPage() {
     });
 
     return filtered;
-  }, [transactions, searchTerm, filterCategory, filterSource, filterCycleId, filterMonth, sortBy, sortDir, salaryCycleDay]);
+  }, [transactions, searchTerm, filterCategory, filterSource, filterCycleId, filterMonth, sortBy, sortDir, salaryCycleDay, incomeDates]);
 
   const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
   const categories = [...new Set(transactions.filter(t => t.type === 'expense').map(t => t.category).filter(Boolean))];

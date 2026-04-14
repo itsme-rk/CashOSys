@@ -71,6 +71,13 @@ export default function DashboardPage() {
     return () => unsubs.forEach(u => u());
   }, [user]);
 
+  const incomeDates = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income' && t.category === 'Income' && t.date)
+      .map(t => new Date(t.date).toISOString())
+      .sort();
+  }, [transactions]);
+
   // Set default cycle
   useEffect(() => {
     if (!selectedCycleId) {
@@ -79,7 +86,7 @@ export default function DashboardPage() {
     }
   }, [salaryCycleDay, selectedCycleId]);
 
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay, incomeDates).reverse(), [salaryCycleDay, incomeDates]);
   const currentCycle = availableMonths.find(c => c.id === selectedCycleId) || getCurrentCycle(salaryCycleDay);
 
   // Close dropdown on outside click
@@ -97,7 +104,7 @@ export default function DashboardPage() {
   const metrics = useMemo(() => {
     const cycleTransactions = transactions.filter(t => {
       if (!t.date) return false;
-      const cycle = getCycleForDate(t.date, salaryCycleDay);
+      const cycle = getCycleForDate(t.date, salaryCycleDay, incomeDates);
       return cycle.id === selectedCycleId;
     });
 

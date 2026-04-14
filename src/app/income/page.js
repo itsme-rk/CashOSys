@@ -23,7 +23,13 @@ export default function IncomePage() {
   const dropdownRef = useRef(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
-  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay).reverse(), [salaryCycleDay]);
+  const incomeDates = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income' && t.category === 'Income' && t.date)
+      .map(t => new Date(t.date).toISOString())
+      .sort();
+  }, [transactions]);
+  const availableMonths = useMemo(() => getAvailableMonths(salaryCycleDay, incomeDates).reverse(), [salaryCycleDay, incomeDates]);
 
   // Calendar months from data
   const calendarMonths = useMemo(() => {
@@ -64,7 +70,7 @@ export default function IncomePage() {
     if (filterMode === 'cycle' && selectedCycleId !== 'all') {
       return transactions.filter(t => {
         if (!t.date) return false;
-        const cycle = getCycleForDate(t.date, salaryCycleDay);
+        const cycle = getCycleForDate(t.date, salaryCycleDay, incomeDates);
         return cycle.id === selectedCycleId;
       });
     }
@@ -77,7 +83,7 @@ export default function IncomePage() {
       });
     }
     return transactions;
-  }, [transactions, selectedCycleId, selectedMonth, filterMode, salaryCycleDay]);
+  }, [transactions, selectedCycleId, selectedMonth, filterMode, salaryCycleDay, incomeDates]);
 
   const incomeEntries = filteredTransactions.filter(t => t.type === 'income');
   const totalIncome = incomeEntries.reduce((s, t) => s + (t.amount || 0), 0);
@@ -102,7 +108,7 @@ export default function IncomePage() {
     const months = {};
     transactions.forEach(t => {
       if (!t.date) return;
-      const cycle = getCycleForDate(t.date, salaryCycleDay);
+      const cycle = getCycleForDate(t.date, salaryCycleDay, incomeDates);
       const key = cycle.id;
       if (!months[key]) months[key] = { label: cycle.label, id: key, income: {}, expenses: {} };
 
@@ -115,7 +121,7 @@ export default function IncomePage() {
       }
     });
     return Object.values(months).sort((a, b) => b.id.localeCompare(a.id));
-  }, [transactions, salaryCycleDay]);
+  }, [transactions, salaryCycleDay, incomeDates]);
 
   const handleEditSave = async (txId) => {
     const updates = {};
