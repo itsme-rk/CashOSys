@@ -31,17 +31,23 @@ export default function LendingPage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         {items.map(item => (
-          <div key={item.id} className="card card-compact" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.875rem', color: 'var(--accent-gold)' }}>{item.personName?.[0]?.toUpperCase()}</div>
-            <div style={{ flex: 1 }}>
+          <div key={item.id} className="card card-compact" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.875rem', color: 'var(--accent-gold)', flexShrink: 0 }}>{item.personName?.[0]?.toUpperCase()}</div>
+            <div style={{ flex: 1, minWidth: 120 }}>
               <div style={{ fontWeight: 700 }}>{item.personName}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{formatDate(item.date, 'medium')}{item.notes ? ` • ${item.notes}` : ''}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', wordBreak: 'break-word' }}>{formatDate(item.date, 'medium')}{item.notes ? ` • ${item.notes}` : ''}</div>
             </div>
-            <div style={{ fontWeight: 800 }}>{formatCurrency(item.amount)}</div>
-            <select value={item.status} onChange={e => updateDocument(user.uid, 'personalLending', item.id, { status: e.target.value })} style={{ width: 100, height: 32, fontSize: '0.75rem', borderColor: statusColors[item.status], color: statusColors[item.status] }}>
-              {LENDING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button style={{ color: 'var(--text-tertiary)' }} onClick={() => { if (confirm('Delete?')) deleteDocument(user.uid, 'personalLending', item.id); }}><Trash2 size={14} /></button>
+            <div style={{ fontWeight: 800, flexShrink: 0 }}>{formatCurrency(item.amount)}</div>
+            <div style={{ flexShrink: 0 }}>
+              <select
+                value={item.status}
+                onChange={e => updateDocument(user.uid, 'personalLending', item.id, { status: e.target.value })}
+                style={{ width: 110, height: 32, fontSize: '0.75rem', borderColor: statusColors[item.status], color: statusColors[item.status] }}
+              >
+                {LENDING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <button style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} onClick={() => { if (confirm('Delete?')) deleteDocument(user.uid, 'personalLending', item.id); }}><Trash2 size={14} /></button>
           </div>
         ))}
         {items.length === 0 && <div className="card empty-state"><Users size={48} /><h3>No lending</h3><p>Track money lent to friends</p></div>}

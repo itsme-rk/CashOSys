@@ -6,10 +6,12 @@ import {
   deleteDoc,
   getDocs,
   getDoc,
+  setDoc,
   query,
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -141,7 +143,8 @@ export function subscribeToCollection(userId, collectionName, callback, constrai
 // ===========================
 export async function addTransaction(userId, data) {
   return addDocument(userId, 'transactions', {
-    type: data.type, // 'income' or 'expense'
+    type: data.type, // 'income' | 'expense'
+    subType: data.subType || '',  // 'salary'|'freelance'|'refund'|'lending_return'|'investment'|etc
     category: data.category,
     description: data.description || '',
     amount: Number(data.amount),
@@ -151,13 +154,31 @@ export async function addTransaction(userId, data) {
     salaryCycleLabel: data.salaryCycleLabel || '',
     isInvestment: data.isInvestment || false,
     linkedInvestmentId: data.linkedInvestmentId || null,
+    // Fuel-specific optional fields
+    litres: data.litres ? Number(data.litres) : null,
+    odometerReading: data.odometerReading ? Number(data.odometerReading) : null,
   });
 }
 
+// Paginated transactions — initial 50 most recent, used by all pages
 export function subscribeTransactions(userId, callback) {
   return subscribeToCollection(userId, 'transactions', callback, [
     orderBy('date', 'desc'),
+    limit(200),           // keep recent 200 in real-time; older fetched on demand
   ]);
+}
+
+// Load a page of older transactions (for expenses page lazy loading)
+export async function getTransactionsPage(userId, lastDoc, pageSize = 50) {
+  const colRef = userCollection(userId, 'transactions');
+  const constraints = [orderBy('date', 'desc'), limit(pageSize)];
+  if (lastDoc) constraints.push(startAfter(lastDoc));
+  const snap = await getDocs(query(colRef, ...constraints));
+  return {
+    docs: snap.docs.map(d => ({ id: d.id, ...d.data(), _ref: d })),
+    lastDoc: snap.docs[snap.docs.length - 1] || null,
+    hasMore: snap.docs.length === pageSize,
+  };
 }
 
 // ===========================
@@ -356,6 +377,25 @@ export async function batchImport(userId, collectionName, records, onProgress) {
       });
     }
   }
-  
   return { imported, errors };
 }
+
+// ===========================
+// AI INSIGHTS CACHE
+// ===========================
+export async function getCachedInsights(userId, cycleId) {
+  const ref = doc(db, 'users', userId, 'aiInsights', cycleId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function cacheInsights(userId, cycleId, insights) {
+  const ref = doc(db, 'users', userId, 'aiInsights', cycleId);
+  await setDoc(ref, {
+    insights,
+    cycleId,
+    generatedAt: new Date().toISOString(),
+  });
+}
+

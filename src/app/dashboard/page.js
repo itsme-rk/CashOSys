@@ -172,14 +172,41 @@ export default function DashboardPage() {
       : 0;
     const survivalMonths = avgMonthlyExpense > 0 ? efBalance / avgMonthlyExpense : 0;
 
+    // Fuel stats for current cycle
+    const fuelEntries = cycleTransactions.filter(
+      t => t.type === 'expense' && t.category?.toLowerCase() === 'fuel' && t.litres > 0
+    );
+    let fuelStats = null;
+    if (fuelEntries.length > 0) {
+      const sortedFuel = [...fuelEntries].sort((a, b) => a.date.localeCompare(b.date));
+      let totalMileage = 0, mileagePairs = 0;
+      for (let i = 1; i < sortedFuel.length; i++) {
+        const prev = sortedFuel[i - 1];
+        const curr = sortedFuel[i];
+        if (curr.odometerReading && prev.odometerReading && curr.litres) {
+          const km = curr.odometerReading - prev.odometerReading;
+          if (km > 0) { totalMileage += km / curr.litres; mileagePairs++; }
+        }
+      }
+      const totalLitres = fuelEntries.reduce((s, t) => s + (t.litres || 0), 0);
+      const totalSpend  = fuelEntries.reduce((s, t) => s + (t.amount || 0), 0);
+      fuelStats = {
+        totalSpend,
+        totalLitres,
+        avgMileage: mileagePairs > 0 ? totalMileage / mileagePairs : null,
+        costPerKm:  mileagePairs > 0 && totalMileage > 0 ? totalSpend / (totalMileage * mileagePairs) : null,
+      };
+    }
+
     return {
       income, expenses, balance, savingsRate, categoryData,
       sourceBalances, totalInvested, totalCurrentValue, investmentGain,
       efBalance, survivalMonths, totalGoalTarget, totalGoalSaved,
       totalLoanRemaining, lendingOutstanding, netWorth,
       recentTransactions: cycleTransactions.slice(0, 8),
+      fuelStats,
     };
-  }, [transactions, investments, emergencyFund, goals, loans, lending, selectedCycleId, salaryCycleDay]);
+  }, [transactions, investments, emergencyFund, goals, loans, lending, selectedCycleId, salaryCycleDay, incomeDates]);
 
   // Monthly trend data
   const trendData = useMemo(() => {
@@ -448,6 +475,37 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Fuel This Cycle Widget — only shows if fuel entries exist */}
+        {metrics.fuelStats && (
+          <div className="card" style={{ padding: 'var(--space-4)' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, marginBottom: 16, fontSize: '1rem' }}>
+              ⛽ Fuel This Cycle
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+              <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Spend</div>
+                <div style={{ fontWeight: 800, color: 'var(--error)' }}>{formatCurrency(metrics.fuelStats.totalSpend)}</div>
+              </div>
+              <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Litres</div>
+                <div style={{ fontWeight: 800 }}>{metrics.fuelStats.totalLitres?.toFixed(1)}L</div>
+              </div>
+              {metrics.fuelStats.avgMileage && (
+                <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Avg Mileage</div>
+                  <div style={{ fontWeight: 800, color: 'var(--accent-green)' }}>{metrics.fuelStats.avgMileage?.toFixed(1)} km/L</div>
+                </div>
+              )}
+              {metrics.fuelStats.costPerKm && (
+                <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Cost/km</div>
+                  <div style={{ fontWeight: 800 }}>₹{metrics.fuelStats.costPerKm?.toFixed(2)}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

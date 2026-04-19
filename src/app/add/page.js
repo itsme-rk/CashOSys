@@ -34,6 +34,9 @@ export default function AddTransactionPage() {
   const [isInvestment, setIsInvestment] = useState(false);
   const [investmentBucket, setInvestmentBucket] = useState('');
   const [investmentTicker, setInvestmentTicker] = useState('');
+  const [subType, setSubType] = useState('');
+  const [litres, setLitres] = useState('');
+  const [odometerReading, setOdometerReading] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -76,6 +79,7 @@ export default function AddTransactionPage() {
 
       const txData = {
         type,
+        subType: subType || (type === 'income' ? 'salary' : ''),
         category,
         description,
         amount: parseFloat(amount),
@@ -84,6 +88,9 @@ export default function AddTransactionPage() {
         salaryCycleId: cycle.id,
         salaryCycleLabel: cycle.label,
         isInvestment,
+        // Fuel fields
+        litres: category === 'Fuel' && litres ? parseFloat(litres) : null,
+        odometerReading: category === 'Fuel' && odometerReading ? parseFloat(odometerReading) : null,
       };
 
       // Add transaction
@@ -113,6 +120,9 @@ export default function AddTransactionPage() {
         setIsInvestment(false);
         setInvestmentBucket('');
         setInvestmentTicker('');
+        setSubType('');
+        setLitres('');
+        setOdometerReading('');
         setSuccess(false);
       }, 1500);
     } catch (err) {
@@ -284,6 +294,36 @@ export default function AddTransactionPage() {
                 value={investmentTicker}
                 onChange={(e) => setInvestmentTicker(e.target.value)}
                 placeholder="e.g., ADANIPOWER.NS"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Fuel tracker fields — shown only when Fuel category is selected */}
+        {type === 'expense' && category === 'Fuel' && (
+          <div className={styles.investmentFields}>
+            <div className={styles.field}>
+              <label htmlFor="fuel-litres">⛽ Litres Filled</label>
+              <input
+                id="fuel-litres"
+                type="number"
+                step="0.1"
+                min="0"
+                value={litres}
+                onChange={e => setLitres(e.target.value)}
+                placeholder="e.g., 10.5"
+              />
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="fuel-odometer">🛞 Odometer Reading (km)</label>
+              <input
+                id="fuel-odometer"
+                type="number"
+                step="1"
+                min="0"
+                value={odometerReading}
+                onChange={e => setOdometerReading(e.target.value)}
+                placeholder="e.g., 24580"
               />
             </div>
           </div>

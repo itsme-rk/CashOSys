@@ -78,12 +78,12 @@ export default function WatchlistPage() {
       {item.whyBuy && (
         <div style={{ marginBottom: 8, padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', borderLeft: `3px solid ${PRIORITY_COLORS[item.priority || 'medium']}` }}>
           <div style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Investment Thesis</div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.whyBuy}</div>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 180, overflowY: 'auto' }}>{item.whyBuy}</div>
         </div>
       )}
 
       {/* Notes */}
-      {item.notes && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>📝 {item.notes}</div>}
+      {item.notes && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic', wordBreak: 'break-word', overflowWrap: 'break-word' }}>📝 {item.notes}</div>}
     </div>
   );
 
