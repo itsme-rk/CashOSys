@@ -31,6 +31,12 @@ export const DEFAULT_INCOME_SOURCES = [
   { name: 'Income 2.0', type: 'freelance', color: '#D4AF37', icon: '💻' },
 ];
 
+export const DEFAULT_REFUND_SOURCES = [
+  { name: 'Expense Refund', type: 'refund', color: '#45B7D1', icon: '🔄' },
+  { name: 'Lending Repay', type: 'repay', color: '#82E0AA', icon: '🤝' },
+  { name: 'Cashback', type: 'cashback', color: '#F7DC6F', icon: '✨' },
+];
+
 // Default investment buckets
 export const DEFAULT_INVESTMENT_BUCKETS = [
   { name: 'Gold Digital', icon: '🥇', color: '#D4AF37' },

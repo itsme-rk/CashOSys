@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeInvestments, subscribeWatchlist } from '@/lib/firestore';
 import { formatCurrency } from '@/lib/constants';
-import { callAI, parseAIJson } from '@/lib/ai';
+import { callAI, parseAIJson, getStockQuote } from '@/lib/ai';
 import { Brain, TrendingUp, TrendingDown, Shield, AlertTriangle, Sparkles, RefreshCw, Newspaper, Target, Search } from 'lucide-react';
 
 export default function MarketIntelligencePage() {
@@ -104,36 +104,56 @@ Focus on Indian markets (NSE/BSE). Be specific about sectors, entry points, and 
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
     setSearchResult(null);
+    setError('');
+    
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+      // If user provided a .NS or .BSE ticker, try direct stock lookup first
+      const isTicker = searchQuery.includes('.NS') || searchQuery.includes('.BSE');
+      const ticker = isTicker ? searchQuery : `${searchQuery.toUpperCase()}.NS`;
+      
+      const quote = await getStockQuote(ticker);
+      
+      if (quote) {
         setSearchResult({
-          name: searchQuery,
-          summary: 'Configure your Gemini API key to get AI-powered stock analysis.',
-          recommendation: 'N/A',
-          risk_level: 'N/A',
+          isQuote: true,
+          name: quote.symbol,
+          ticker: quote.symbol,
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
+          volume: quote.volume,
+          high: quote.high,
+          low: quote.low,
+          lastTraded: quote.lastTraded,
         });
-        setSearchLoading(false);
-        return;
+      } else {
+        // Fallback or handle not found
+        setError(`Could not retrieve data from Alpha Vantage for ${ticker}. Ensure NEXT_PUBLIC_ALPHA_VANTAGE_KEY is set or try adding .NS (e.g., RELIANCE.NS)`);
       }
-
-      try {
-        const text = await callAI(
-          `You are an Indian stock market expert. Give a brief investment analysis for "${searchQuery}" (Indian market context). 
-Include: what is it, current sentiment, whether to invest, risk level, and a brief outlook. 
-Reply in JSON: {"name": "...", "ticker": "...", "type": "stock/etf/mf", "summary": "...", "recommendation": "BUY/HOLD/AVOID", "risk_level": "low/medium/high", "key_points": ["point1", "point2"], "outlook": "..."}`
-        );
-        const parsed = parseAIJson(text);
-        if (parsed) {
-          setSearchResult(parsed);
-        } else {
-          setError('Could not interpret AI response');
-        }
-      } catch (err) {
-        setError(err.message);
-      }
+    } catch (err) {
+      setError(err.message || 'Failed to search stock');
     } finally {
       setSearchLoading(false);
+    }
+  };
+
+  const handleSaveRecommendation = async (rec) => {
+    try {
+      const { addDocument } = await import('@/lib/firestore');
+      await addDocument(user.uid, 'watchlist', {
+        name: rec.name,
+        ticker: rec.ticker || '',
+        currentPrice: 0,
+        targetPrice: 0,
+        type: rec.type === 'stock' ? 'Equity' : rec.type === 'etf' ? 'ETF' : 'Mutual Fund',
+        priority: 'Medium',
+        notes: rec.reason + (rec.entry_strategy ? `\nEntry Strategy: ${rec.entry_strategy}` : ''),
+        investmentThesis: 'AI Recommendation',
+        riskLevel: 'Medium',
+      });
+      alert('Saved to watchlist successfully!');
+    } catch (err) {
+      alert('Failed to save to watchlist: ' + err.message);
     }
   };
 
@@ -281,25 +301,46 @@ Reply in JSON: {"name": "...", "ticker": "...", "type": "stock/etf/mf", "summary
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
                   <h3 style={{ fontWeight: 800, fontSize: '1.25rem' }}>{searchResult.name}</h3>
-                  {searchResult.ticker && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>{searchResult.ticker} • {searchResult.type}</div>}
+                  {searchResult.ticker && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>{searchResult.ticker}</div>}
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <span className="badge" style={{ background: `${riskColors[searchResult.risk_level]}20`, color: riskColors[searchResult.risk_level] }}>{searchResult.risk_level} risk</span>
-                  <span className="badge" style={{ background: `${actionColors[searchResult.recommendation]}20`, color: actionColors[searchResult.recommendation], fontWeight: 800, fontSize: '0.875rem' }}>{searchResult.recommendation}</span>
-                </div>
-              </div>
-              <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>{searchResult.summary}</p>
-              {searchResult.key_points?.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: 8, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Key Points</div>
-                  {searchResult.key_points.map((p, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                      <Sparkles size={14} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: 3 }} /> {p}
+                {searchResult.isQuote ? (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>₹{searchResult.price?.toFixed(2)}</div>
+                    <div className={searchResult.change >= 0 ? "currency-positive" : "currency-negative"} style={{ fontWeight: 600 }}>
+                      {searchResult.change >= 0 ? '+' : ''}{searchResult.change?.toFixed(2)} ({searchResult.changePercent})
                     </div>
-                  ))}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <span className="badge" style={{ background: `${riskColors[searchResult.risk_level]}20`, color: riskColors[searchResult.risk_level] }}>{searchResult.risk_level} risk</span>
+                    <span className="badge" style={{ background: `${actionColors[searchResult.recommendation]}20`, color: actionColors[searchResult.recommendation], fontWeight: 800, fontSize: '0.875rem' }}>{searchResult.recommendation}</span>
+                  </div>
+                )}
+              </div>
+              
+              {searchResult.isQuote ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 16, borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                  <div><div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>High</div><div style={{ fontWeight: 600 }}>₹{searchResult.high?.toFixed(2)}</div></div>
+                  <div><div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Low</div><div style={{ fontWeight: 600 }}>₹{searchResult.low?.toFixed(2)}</div></div>
+                  <div><div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Volume</div><div style={{ fontWeight: 600 }}>{searchResult.volume?.toLocaleString()}</div></div>
+                  <div><div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Last Traded</div><div style={{ fontWeight: 600 }}>{searchResult.lastTraded}</div></div>
                 </div>
+              ) : (
+                <>
+                  <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>{searchResult.summary}</p>
+                  {searchResult.key_points?.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: 8, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Key Points</div>
+                      {searchResult.key_points.map((p, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                          <Sparkles size={14} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: 3 }} /> {p}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {searchResult.outlook && <p style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Outlook: {searchResult.outlook}</p>}
+                </>
               )}
-              {searchResult.outlook && <p style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Outlook: {searchResult.outlook}</p>}
             </div>
           )}
         </>
@@ -319,7 +360,10 @@ Reply in JSON: {"name": "...", "ticker": "...", "type": "stock/etf/mf", "summary
                         <div style={{ fontWeight: 800, fontSize: '1.0625rem' }}>{rec.name}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{rec.ticker} • {rec.type}</div>
                       </div>
-                      <span className="badge badge-green">Recommended</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleSaveRecommendation(rec)}>Save to Watchlist</button>
+                        <span className="badge badge-green">Recommended</span>
+                      </div>
                     </div>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 8 }}>{rec.reason}</p>
                     {rec.entry_strategy && (

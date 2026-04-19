@@ -13,6 +13,7 @@ import { getCycleForDate } from '@/lib/salaryCycle';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_SOURCES,
+  DEFAULT_REFUND_SOURCES,
   DEFAULT_INVESTMENT_BUCKETS,
 } from '@/lib/constants';
 import {
@@ -77,9 +78,10 @@ export default function AddTransactionPage() {
     try {
       const cycle = getCycleForDate(date, salaryCycleDay);
 
+      const computedSubType = subType || (type === 'income' ? 'salary' : (type === 'refund' ? 'refund_repay' : ''));
       const txData = {
-        type,
-        subType: subType || (type === 'income' ? 'salary' : ''),
+        type: type === 'refund' ? 'income' : type, // Structural type is income so it increases balance
+        subType: computedSubType, // Keeps 'refund_repay' label so Dashboard can exclude it from Salary
         category,
         description,
         amount: parseFloat(amount),
@@ -143,18 +145,29 @@ export default function AddTransactionPage() {
       {/* Type Toggle */}
       <div className={styles.typeToggle}>
         <button
+          type="button"
           className={`${styles.typeBtn} ${type === 'expense' ? styles.typeExpense : ''}`}
-          onClick={() => setType('expense')}
+          onClick={() => { setType('expense'); setCategory(''); }}
         >
           <TrendingDown size={18} />
           Expense
         </button>
         <button
+          type="button"
           className={`${styles.typeBtn} ${type === 'income' ? styles.typeIncome : ''}`}
-          onClick={() => setType('income')}
+          onClick={() => { setType('income'); setCategory(''); }}
         >
           <TrendingUp size={18} />
           Income
+        </button>
+        <button
+          type="button"
+          className={`${styles.typeBtn} ${type === 'refund' ? styles.typeRefund : ''}`}
+          onClick={() => { setType('refund'); setCategory(''); }}
+          style={{ '--btn-color': '#45B7D1', color: type === 'refund' ? '#fff' : 'var(--text-secondary)' }}
+        >
+          <ArrowLeft size={18} />
+          Refund
         </button>
       </div>
 
@@ -178,9 +191,11 @@ export default function AddTransactionPage() {
 
         {/* Category */}
         <div className={styles.field}>
-          <label htmlFor="add-category">{type === 'income' ? 'Source' : 'Category'}</label>
+          <label htmlFor="add-category">
+            {type === 'income' ? 'Source' : type === 'refund' ? 'Refund Type' : 'Category'}
+          </label>
           <div className={styles.categoryGrid}>
-            {(type === 'expense' ? allExpenseCategories : allIncomeSources).map((cat) => (
+            {(type === 'expense' ? allExpenseCategories : type === 'income' ? allIncomeSources : DEFAULT_REFUND_SOURCES).map((cat) => (
               <button
                 key={cat.name}
                 type="button"

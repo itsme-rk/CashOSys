@@ -12,6 +12,7 @@ import {
   subscribeIncomeSources,
 } from '@/lib/firestore';
 import { getCurrentCycle, getCycleForDate, getAvailableMonths } from '@/lib/salaryCycle';
+import { getDashboardData } from '@/lib/dashboardCache';
 import { formatCurrency, formatPercent, formatDate } from '@/lib/constants';
 import {
   TrendingUp,
@@ -100,128 +101,24 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Computed metrics
+  // Computed metrics using unified cache layer
   const metrics = useMemo(() => {
-    const cycleTransactions = transactions.filter(t => {
-      if (!t.date) return false;
-      const cycle = getCycleForDate(t.date, salaryCycleDay, incomeDates);
-      return cycle.id === selectedCycleId;
+    return getDashboardData({
+      transactions,
+      investments,
+      efEntries: emergencyFund,
+      goals,
+      loans,
+      lending,
+      salaryCycleDay,
+      incomeDates,
+      selectedCycleId,
+      getCycleForDate,
     });
-
-    const income = cycleTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    const expenses = cycleTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    const balance = income - expenses;
-    const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
-
-    // Category breakdown
-    const categoryMap = {};
-    cycleTransactions.filter(t => t.type === 'expense').forEach(t => {
-      const cat = t.category || 'Misc';
-      categoryMap[cat] = (categoryMap[cat] || 0) + (t.amount || 0);
-    });
-    const categoryData = Object.entries(categoryMap)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-
-    // Per-source balance
-    const sourceBalances = {};
-    cycleTransactions.forEach(t => {
-      const source = t.fundingSource || (t.type === 'income' ? t.category : '');
-      if (!source) return;
-      if (!sourceBalances[source]) sourceBalances[source] = { income: 0, expenses: 0 };
-      if (t.type === 'income') sourceBalances[source].income += t.amount || 0;
-      if (t.type === 'expense') sourceBalances[source].expenses += t.amount || 0;
-    });
-
-    // Total portfolio value
-    const totalInvested = investments.reduce((sum, i) => sum + (i.investedAmount || 0) - (i.withdrawal || 0), 0);
-    const totalCurrentValue = investments.reduce((sum, i) => sum + (i.currentValue || i.investedAmount || 0), 0);
-    const investmentGain = totalCurrentValue - totalInvested;
-
-    // Emergency fund balance
-    const efBalance = emergencyFund.reduce((sum, e) => sum + (e.amount || 0), 0);
-
-    // Goals progress
-    const totalGoalTarget = goals.reduce((sum, g) => sum + (g.targetAmount || 0), 0);
-    const totalGoalSaved = goals.reduce((sum, g) => sum + (g.savedAmount || 0), 0);
-
-    // Loans remaining
-    const totalLoanRemaining = loans.reduce((sum, l) => sum + ((l.totalAmount || 0) - (l.paidTillDate || 0)), 0);
-
-    // Lending outstanding
-    const lendingOutstanding = lending
-      .filter(l => l.status === 'waiting' || l.status === 'partial')
-      .reduce((sum, l) => sum + (l.amount || 0), 0);
-
-    // Net worth
-    const netWorth = balance + totalCurrentValue + efBalance + totalGoalSaved - totalLoanRemaining;
-
-    // Monthly average expenses (from all transactions)
-    const allExpenses = transactions.filter(t => t.type === 'expense');
-    const avgMonthlyExpense = allExpenses.length > 0 
-      ? allExpenses.reduce((sum, t) => sum + (t.amount || 0), 0) / Math.max(1, new Set(allExpenses.map(t => {
-          const d = new Date(t.date);
-          return `${d.getFullYear()}-${d.getMonth()}`;
-        })).size)
-      : 0;
-    const survivalMonths = avgMonthlyExpense > 0 ? efBalance / avgMonthlyExpense : 0;
-
-    // Fuel stats for current cycle
-    const fuelEntries = cycleTransactions.filter(
-      t => t.type === 'expense' && t.category?.toLowerCase() === 'fuel' && t.litres > 0
-    );
-    let fuelStats = null;
-    if (fuelEntries.length > 0) {
-      const sortedFuel = [...fuelEntries].sort((a, b) => a.date.localeCompare(b.date));
-      let totalMileage = 0, mileagePairs = 0;
-      for (let i = 1; i < sortedFuel.length; i++) {
-        const prev = sortedFuel[i - 1];
-        const curr = sortedFuel[i];
-        if (curr.odometerReading && prev.odometerReading && curr.litres) {
-          const km = curr.odometerReading - prev.odometerReading;
-          if (km > 0) { totalMileage += km / curr.litres; mileagePairs++; }
-        }
-      }
-      const totalLitres = fuelEntries.reduce((s, t) => s + (t.litres || 0), 0);
-      const totalSpend  = fuelEntries.reduce((s, t) => s + (t.amount || 0), 0);
-      fuelStats = {
-        totalSpend,
-        totalLitres,
-        avgMileage: mileagePairs > 0 ? totalMileage / mileagePairs : null,
-        costPerKm:  mileagePairs > 0 && totalMileage > 0 ? totalSpend / (totalMileage * mileagePairs) : null,
-      };
-    }
-
-    return {
-      income, expenses, balance, savingsRate, categoryData,
-      sourceBalances, totalInvested, totalCurrentValue, investmentGain,
-      efBalance, survivalMonths, totalGoalTarget, totalGoalSaved,
-      totalLoanRemaining, lendingOutstanding, netWorth,
-      recentTransactions: cycleTransactions.slice(0, 8),
-      fuelStats,
-    };
   }, [transactions, investments, emergencyFund, goals, loans, lending, selectedCycleId, salaryCycleDay, incomeDates]);
 
-  // Monthly trend data
-  const trendData = useMemo(() => {
-    const months = {};
-    transactions.forEach(t => {
-      if (!t.date) return;
-      const d = new Date(t.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('en-US', { month: 'short' });
-      if (!months[key]) months[key] = { month: label, income: 0, expenses: 0 };
-      if (t.type === 'income') months[key].income += t.amount || 0;
-      if (t.type === 'expense') months[key].expenses += t.amount || 0;
-    });
-    return Object.values(months).slice(-6);
-  }, [transactions]);
+  // Use trendData directly from metrics
+  const trendData = metrics.trendData;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload) return null;
@@ -334,7 +231,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
-                    data={metrics.categoryData}
+                    data={metrics.categoryChartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
@@ -342,7 +239,7 @@ export default function DashboardPage() {
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {metrics.categoryData.map((_, idx) => (
+                    {metrics.categoryChartData.map((_, idx) => (
                       <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
                     ))}
                   </Pie>
@@ -350,7 +247,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
               <div className={styles.categoryLegend}>
-                {metrics.categoryData.slice(0, 6).map((cat, idx) => (
+                {metrics.categoryChartData.slice(0, 6).map((cat, idx) => (
                   <div key={cat.name} className={styles.legendItem}>
                     <span className={styles.legendDot} style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }} />
                     <span className={styles.legendName}>{cat.name}</span>
@@ -441,7 +338,7 @@ export default function DashboardPage() {
               <PiggyBank size={16} style={{ color: '#BB8FCE' }} />
               <span>Lending Out</span>
             </div>
-            <div className={styles.miniValue}>{formatCurrency(metrics.lendingOutstanding)}</div>
+            <div className={styles.miniValue}>{formatCurrency(metrics.totalLendingOutstanding)}</div>
             <div className={styles.miniSub}>{lending.filter(l => l.status === 'waiting').length} pending</div>
           </div>
         </div>
