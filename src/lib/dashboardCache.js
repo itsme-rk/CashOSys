@@ -156,8 +156,10 @@ export function getDashboardData({
     };
   }
 
+  const netWorth = savings + totalCurrentVal + efBalance + totalGoalSaved - totalLoanRemaining;
+
   _cache = {
-    totalIncome, totalExpenses, savings, savingsRate,
+    totalIncome, totalExpenses, savings, savingsRate, netWorth,
     categoryBreakdown, categoryChartData, trendData,
     sourceBalances,
     totalInvested, totalCurrentVal, investmentGain,

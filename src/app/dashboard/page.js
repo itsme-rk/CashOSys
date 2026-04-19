@@ -178,8 +178,8 @@ export default function DashboardPage() {
             <Wallet size={24} />
           </div>
           <div className={styles.heroLabel}>Net Balance</div>
-          <div className={`${styles.heroValue} ${metrics.balance >= 0 ? 'currency-positive' : 'currency-negative'}`}>
-            {formatCurrency(metrics.balance)}
+          <div className={`${styles.heroValue} ${metrics.savings >= 0 ? 'currency-positive' : 'currency-negative'}`}>
+            {formatCurrency(metrics.savings)}
           </div>
           <div className={`${styles.heroChange} ${metrics.savingsRate >= 0 ? styles.positive : styles.negative}`}>
             {metrics.savingsRate >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
@@ -193,7 +193,7 @@ export default function DashboardPage() {
           </div>
           <div className={styles.heroLabel}>Total Income</div>
           <div className={`${styles.heroValue} currency-positive`}>
-            {formatCurrency(metrics.income)}
+            {formatCurrency(metrics.totalIncome)}
           </div>
         </div>
 
@@ -203,7 +203,7 @@ export default function DashboardPage() {
           </div>
           <div className={styles.heroLabel}>Total Expenses</div>
           <div className={`${styles.heroValue} currency-negative`}>
-            {formatCurrency(metrics.expenses)}
+            {formatCurrency(metrics.totalExpenses)}
           </div>
         </div>
 
@@ -226,7 +226,7 @@ export default function DashboardPage() {
             <BarChart3 size={18} />
             Spending by Category
           </h3>
-          {metrics.categoryData.length > 0 ? (
+          {metrics.categoryChartData?.length > 0 ? (
             <div className={styles.pieChartContainer}>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -310,7 +310,7 @@ export default function DashboardPage() {
               <span>Emergency Fund</span>
             </div>
             <div className={styles.miniValue}>{formatCurrency(metrics.efBalance)}</div>
-            <div className={styles.miniSub}>{metrics.survivalMonths.toFixed(1)} months survival</div>
+            <div className={styles.miniSub}>{(metrics.efMonths || 0).toFixed(1)} months survival</div>
           </div>
 
           <div className={`card card-compact ${styles.miniCard}`}>
@@ -318,7 +318,7 @@ export default function DashboardPage() {
               <TrendingUp size={16} className="text-gold" />
               <span>Investments</span>
             </div>
-            <div className={styles.miniValue}>{formatCurrency(metrics.totalCurrentValue)}</div>
+            <div className={styles.miniValue}>{formatCurrency(metrics.totalCurrentVal)}</div>
             <div className={`${styles.miniSub} ${metrics.investmentGain >= 0 ? 'text-green' : 'text-error'}`}>
               {formatCurrency(metrics.investmentGain, true)} gain
             </div>
