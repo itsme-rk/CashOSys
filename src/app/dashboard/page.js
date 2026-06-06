@@ -10,6 +10,7 @@ import {
   subscribeLoans,
   subscribeLending,
   subscribeIncomeSources,
+  getBudgets,
 } from '@/lib/firestore';
 import { getCurrentCycle, getCycleForDate, getAvailableMonths } from '@/lib/salaryCycle';
 import { getDashboardData } from '@/lib/dashboardCache';
@@ -28,6 +29,8 @@ import {
   DollarSign,
   Shield,
   Activity,
+  Flame,
+  Fuel,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
@@ -51,11 +54,13 @@ export default function DashboardPage() {
   const [loans, setLoans] = useState([]);
   const [lending, setLending] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
+  const [budgetTargets, setBudgetTargets] = useState([]);
   const [selectedCycleId, setSelectedCycleId] = useState(null);
   const [showCycleDropdown, setShowCycleDropdown] = useState(false);
   const cycleDropdownRef = useRef(null);
 
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
+  const primaryIncomeSource = userProfile?.primaryIncomeSource || 'Income';
 
   // Subscribe to all data
   useEffect(() => {
@@ -69,6 +74,7 @@ export default function DashboardPage() {
       subscribeLending(user.uid, setLending),
       subscribeIncomeSources(user.uid, setIncomeSources),
     ];
+    getBudgets(user.uid).then(setBudgetTargets);
     return () => unsubs.forEach(u => u());
   }, [user]);
 
@@ -114,10 +120,11 @@ export default function DashboardPage() {
       incomeDates,
       selectedCycleId,
       getCycleForDate,
+      primaryIncomeSource,
+      budgetTargets,
     });
-  }, [transactions, investments, emergencyFund, goals, loans, lending, selectedCycleId, salaryCycleDay, incomeDates]);
+  }, [transactions, investments, emergencyFund, goals, loans, lending, selectedCycleId, salaryCycleDay, incomeDates, primaryIncomeSource, budgetTargets]);
 
-  // Use trendData directly from metrics
   const trendData = metrics.trendData;
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -171,6 +178,31 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Source Balance Cards */}
+      {metrics.sourceBalanceCards?.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`, gap: 'var(--space-4)' }}>
+          {metrics.sourceBalanceCards.map(src => (
+            <div key={src.name} className={`card ${src.isPrimary ? 'card-glow-green' : ''}`} style={{ padding: 'var(--space-4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {src.name}
+                </span>
+                <span className={`badge ${src.isPrimary ? 'badge-green' : 'badge-gold'}`} style={{ fontSize: '0.625rem' }}>
+                  {src.label}
+                </span>
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: src.balance >= 0 ? 'var(--accent-green)' : 'var(--error)', marginBottom: 4 }}>
+                {formatCurrency(src.balance)}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                <span>In: {formatCurrency(src.income)}</span>
+                <span>Out: {formatCurrency(src.expenses)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Hero Stats */}
       <div className={styles.heroStats}>
         <div className={`card ${styles.heroCard} ${styles.balanceCard}`}>
@@ -217,6 +249,55 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Savings Streak */}
+      {metrics.savingsStreak > 0 && (
+        <div className="card card-glow-gold" style={{ padding: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+          <div style={{ fontSize: '2rem' }}>
+            <Flame size={32} style={{ color: 'var(--accent-gold)' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+              {metrics.savingsStreak} Month Savings Streak 🔥
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+              You've saved money for {metrics.savingsStreak} consecutive {metrics.savingsStreak === 1 ? 'cycle' : 'cycles'}. Keep it up!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Budget vs Actual */}
+      {metrics.budgetComparison?.length > 0 && (
+        <div className="card">
+          <h3 className={styles.cardTitle}>
+            <Target size={18} />
+            Budget vs Actual
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {metrics.budgetComparison.map(b => (
+              <div key={b.category}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: '0.875rem' }}>
+                  <span style={{ fontWeight: 600 }}>{b.category}</span>
+                  <span style={{ color: b.isOver ? 'var(--error)' : 'var(--text-secondary)' }}>
+                    {formatCurrency(b.spent)} / {formatCurrency(b.limit)}
+                    {b.isOver && ' ⚠️'}
+                  </span>
+                </div>
+                <div className="progress-bar" style={{ height: 6 }}>
+                  <div
+                    className={`progress-bar-fill ${b.isOver ? 'error' : b.percent > 80 ? 'gold' : ''}`}
+                    style={{ width: `${Math.min(b.percent, 100)}%` }}
+                  />
+                </div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  {b.isOver ? `Over by ${formatCurrency(Math.abs(b.remaining))}` : `${formatCurrency(b.remaining)} remaining`}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className={styles.chartsRow}>
@@ -373,13 +454,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Fuel This Cycle Widget — only shows if fuel entries exist */}
+        {/* Fuel Widget — Rolling 3 Months */}
         {metrics.fuelStats && (
           <div className="card" style={{ padding: 'var(--space-4)' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, marginBottom: 16, fontSize: '1rem' }}>
-              ⛽ Fuel This Cycle
+              ⛽ Fuel (Last 3 Months)
+              {userProfile?.vehicleName && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                  — {userProfile.vehicleName}
+                </span>
+              )}
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 12, marginBottom: 16 }}>
               <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Spend</div>
                 <div style={{ fontWeight: 800, color: 'var(--error)' }}>{formatCurrency(metrics.fuelStats.totalSpend)}</div>
@@ -400,7 +486,38 @@ export default function DashboardPage() {
                   <div style={{ fontWeight: 800 }}>₹{metrics.fuelStats.costPerKm?.toFixed(2)}</div>
                 </div>
               )}
+              <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Refills</div>
+                <div style={{ fontWeight: 800 }}>{metrics.fuelStats.entries}</div>
+              </div>
             </div>
+
+            {/* Monthly Breakdown Table */}
+            {metrics.fuelStats.monthlyBreakdown?.length > 0 && (
+              <>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Monthly Breakdown</div>
+                <table className="data-table" style={{ fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th style={{ textAlign: 'right' }}>Spend</th>
+                      <th style={{ textAlign: 'right' }}>Litres</th>
+                      <th style={{ textAlign: 'right' }}>Refills</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metrics.fuelStats.monthlyBreakdown.map(m => (
+                      <tr key={m.month}>
+                        <td>{m.month}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--error)', fontWeight: 600 }}>{formatCurrency(m.spend)}</td>
+                        <td style={{ textAlign: 'right' }}>{m.litres.toFixed(1)}L</td>
+                        <td style={{ textAlign: 'right' }}>{m.refills}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         )}
       </div>

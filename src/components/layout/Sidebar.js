@@ -22,6 +22,8 @@ import {
   Moon,
   ChevronLeft,
   ChevronRight,
+  Bell,
+  Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -38,8 +40,10 @@ const navItems = [
   { href: '/goals', icon: Target, label: 'Goals' },
   { href: '/loans', icon: CreditCard, label: 'Loans' },
   { href: '/lending', icon: Users, label: 'Lending' },
+  { href: '/reminders', icon: Bell, label: 'Reminders' },
   { href: '/insights', icon: Brain, label: 'AI Insights' },
   { href: '/market', icon: BarChart3, label: 'Market Intel' },
+  { href: '/year-review', icon: Calendar, label: 'Year Review' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ];
 

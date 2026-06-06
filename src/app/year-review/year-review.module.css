@@ -1,0 +1,363 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.02em;
+}
+
+.titleIcon {
+  color: var(--accent-gold);
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  margin-top: var(--space-1);
+}
+
+/* Year selector */
+.yearSelector {
+  position: relative;
+}
+
+.yearSelector select {
+  height: 44px;
+  min-width: 140px;
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.yearSelector select:hover {
+  border-color: var(--border-color-hover);
+}
+
+/* Hero stats grid */
+.heroStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.heroCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  position: relative;
+  overflow: hidden;
+}
+
+.heroIconWrap {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-1);
+}
+
+.heroLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.heroValue {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.heroSub {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.positive {
+  color: var(--accent-green);
+}
+
+.negative {
+  color: var(--error);
+}
+
+.goldValue {
+  color: var(--accent-gold);
+}
+
+/* Charts row */
+.chartsRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.chartCard {
+  min-height: 380px;
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: var(--space-5);
+  color: var(--text-primary);
+}
+
+.cardTitleIcon {
+  color: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.chartContainer {
+  width: 100%;
+  height: 320px;
+}
+
+/* Chart tooltip */
+.chartTooltip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.8125rem;
+}
+
+.tooltipLabel {
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+/* Categories section */
+.categoriesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.categoryList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.categoryItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.categoryRank {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.categoryInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.categoryName {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.categoryBar {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.categoryBarFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.categoryAmount {
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.categoryPercent {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+
+/* Highlights row */
+.highlightsRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.highlightCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.highlightHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.highlightIcon {
+  flex-shrink: 0;
+}
+
+.highlightItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.highlightLabel {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.highlightValue {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fun stats */
+.funStatCard {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(0, 230, 118, 0.05));
+  border: 1px solid rgba(212, 175, 55, 0.15);
+}
+
+.funStatContent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.funStatEmoji {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.funStatText {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.funStatHighlight {
+  color: var(--accent-gold);
+  font-weight: 800;
+}
+
+/* Loading state */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10);
+  gap: var(--space-4);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--accent-green);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .heroStats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .categoriesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .highlightsRow {
+    grid-template-columns: 1fr;
+  }
+
+  .chartContainer {
+    height: 260px;
+  }
+
+  .funStatContent {
+    flex-direction: column;
+    text-align: center;
+  }
+}

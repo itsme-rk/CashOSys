@@ -380,9 +380,6 @@ export async function batchImport(userId, collectionName, records, onProgress) {
   return { imported, errors };
 }
 
-// ===========================
-// AI INSIGHTS CACHE
-// ===========================
 export async function getCachedInsights(userId, cycleId) {
   const ref = doc(db, 'users', userId, 'aiInsights', cycleId);
   const snap = await getDoc(ref);
@@ -399,3 +396,48 @@ export async function cacheInsights(userId, cycleId, insights) {
   });
 }
 
+// ===========================
+// BUDGET TARGETS
+// ===========================
+export function subscribeBudgets(userId, callback) {
+  return subscribeToCollection(userId, 'budgets', callback);
+}
+
+export async function saveBudgets(userId, budgets) {
+  // budgets is an array of { category, limit }
+  // We store a single doc keyed 'monthly' for simplicity
+  const ref = doc(db, 'users', userId, 'budgets', 'monthly');
+  await setDoc(ref, {
+    targets: budgets,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function getBudgets(userId) {
+  const ref = doc(db, 'users', userId, 'budgets', 'monthly');
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data().targets || [] : [];
+}
+
+// ===========================
+// RECURRING TEMPLATES (Quick Select)
+// ===========================
+export function subscribeRecurringTemplates(userId, callback) {
+  return subscribeToCollection(userId, 'recurringTemplates', callback);
+}
+
+export async function addRecurringTemplate(userId, data) {
+  return addDocument(userId, 'recurringTemplates', {
+    type: data.type || 'expense',
+    category: data.category || '',
+    description: data.description || '',
+    amount: data.amount ? Number(data.amount) : null,
+    fundingSource: data.fundingSource || '',
+    icon: data.icon || '📌',
+    label: data.label || data.description || data.category,
+  });
+}
+
+export async function deleteRecurringTemplate(userId, docId) {
+  return deleteDocument(userId, 'recurringTemplates', docId);
+}

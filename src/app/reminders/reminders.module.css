@@ -1,0 +1,295 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.02em;
+}
+
+.titleIcon {
+  color: var(--accent-gold);
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  margin-top: var(--space-1);
+}
+
+/* Summary cards row */
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+}
+
+.summaryLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summaryValue {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Section headers */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.sectionIcon {
+  flex-shrink: 0;
+}
+
+/* Reminder list */
+.reminderList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reminderItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+  animation: slideInRight var(--transition-base) backwards;
+}
+
+.reminderItem:hover {
+  border-color: var(--border-color-hover);
+  box-shadow: var(--card-shadow);
+}
+
+.reminderIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}
+
+.reminderInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminderName {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reminderMeta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reminderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.reminderAmount {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Status badges */
+.statusBadge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.statusDue {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.statusOverdue {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.statusPaid {
+  background: var(--success-bg);
+  color: var(--accent-green);
+}
+
+.statusUpcoming {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.statusInactive {
+  background: rgba(90, 100, 120, 0.15);
+  color: var(--text-tertiary);
+}
+
+/* Toggle switch */
+.toggleSwitch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toggleSwitch.active {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.active .toggleKnob {
+  transform: translateX(18px);
+}
+
+/* Action buttons */
+.itemActions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.actionBtn {
+  color: var(--text-tertiary);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.reminderItem:hover .actionBtn {
+  opacity: 1;
+}
+
+.actionBtn:hover {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+/* Notes */
+.reminderNotes {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Category icon map */
+.categoryIcon {
+  font-size: 1.25rem;
+}
+
+/* Total due */
+.totalDue {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.totalDueAmount {
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .summaryRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .reminderItem {
+    padding: var(--space-3);
+  }
+
+  .actionBtn {
+    opacity: 1;
+  }
+
+  .reminderMeta {
+    flex-wrap: wrap;
+  }
+}

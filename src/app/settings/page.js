@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { updateUserProfile, subscribeIncomeSources, addIncomeSource, deleteDocument, batchImport, getDocuments, clearAllUserData } from '@/lib/firestore';
-import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_SOURCES } from '@/lib/constants';
+import { updateUserProfile, subscribeIncomeSources, addIncomeSource, deleteDocument, batchImport, getDocuments, clearAllUserData, getBudgets, saveBudgets, subscribeRecurringTemplates, addRecurringTemplate, deleteRecurringTemplate } from '@/lib/firestore';
+import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_SOURCES, formatCurrency } from '@/lib/constants';
 import { parseExcelWorkbook, buildExportWorkbook } from '@/lib/excel';
-import { Settings, Sun, Moon, Save, Plus, Trash2, X, Upload, Download, User, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Settings, Sun, Moon, Save, Plus, Trash2, X, Upload, Download, User, CheckCircle, AlertTriangle, Car, Fuel, Target, Zap, Bell } from 'lucide-react';
 import styles from './settings.module.css';
 
 export default function SettingsPage() {
@@ -18,8 +18,26 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   const [salaryCycleDay, setSalaryCycleDay] = useState(28);
+  const [primaryIncomeSource, setPrimaryIncomeSource] = useState('Income');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // Vehicle profile
+  const [vehicleName, setVehicleName] = useState('');
+  const [vehicleType, setVehicleType] = useState('bike');
+  const [tankCapacity, setTankCapacity] = useState('');
+
+  // Budget targets
+  const [budgetTargets, setBudgetTargets] = useState([]);
+  const [showAddBudget, setShowAddBudget] = useState(false);
+  const [newBudgetCategory, setNewBudgetCategory] = useState('');
+  const [newBudgetLimit, setNewBudgetLimit] = useState('');
+  const [budgetSaving, setBudgetSaving] = useState(false);
+
+  // Recurring templates
+  const [recurringTemplates, setRecurringTemplates] = useState([]);
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ type: 'expense', category: '', description: '', amount: '', fundingSource: '', label: '' });
 
   // New income source
   const [showAddSource, setShowAddSource] = useState(false);
@@ -29,7 +47,7 @@ export default function SettingsPage() {
   // Import state
   const [importData, setImportData] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(null); // { collection, imported, total, percent }
+  const [importProgress, setImportProgress] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -39,6 +57,10 @@ export default function SettingsPage() {
       setDisplayName(userProfile.displayName || '');
       setPhotoURL(userProfile.photoURL || '');
       setSalaryCycleDay(userProfile.salaryCycleDay || 28);
+      setPrimaryIncomeSource(userProfile.primaryIncomeSource || 'Income');
+      setVehicleName(userProfile.vehicleName || '');
+      setVehicleType(userProfile.vehicleType || 'bike');
+      setTankCapacity(userProfile.tankCapacity || '');
     }
   }, [userProfile]);
 
@@ -48,6 +70,15 @@ export default function SettingsPage() {
     return () => unsub();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    getBudgets(user.uid).then(setBudgetTargets);
+    const unsub = subscribeRecurringTemplates(user.uid, setRecurringTemplates);
+    return () => unsub();
+  }, [user]);
+
+  const allIncomeSources = [...DEFAULT_INCOME_SOURCES, ...incomeSources];
+
   const handleProfileSave = async () => {
     setProfileSaving(true);
     try {
@@ -55,6 +86,10 @@ export default function SettingsPage() {
         displayName,
         photoURL,
         salaryCycleDay: parseInt(salaryCycleDay),
+        primaryIncomeSource,
+        vehicleName,
+        vehicleType,
+        tankCapacity: tankCapacity ? parseFloat(tankCapacity) : null,
       });
       await refreshProfile();
       setProfileSaved(true);
@@ -70,7 +105,6 @@ export default function SettingsPage() {
     const confirmed = window.confirm(
       "WARNING: This will permanently delete ALL your transactions, investments, goals, watchlist, and other tracked data.\n\nType 'DELETE' to confirm:"
     );
-    // Use prompt to confirm if they actually want it since window.confirm doesn't allow text input easily, so use prompt instead
     if (confirmed) {
       const doubleCheck = window.prompt("Type 'DELETE' to permanently wipe all data.");
       if (doubleCheck === 'DELETE') {
@@ -106,6 +140,33 @@ export default function SettingsPage() {
     }
   };
 
+  // Budget handlers
+  const handleAddBudget = async () => {
+    if (!newBudgetCategory || !newBudgetLimit) return;
+    const updated = [...budgetTargets.filter(b => b.category !== newBudgetCategory), { category: newBudgetCategory, limit: parseFloat(newBudgetLimit) }];
+    setBudgetSaving(true);
+    await saveBudgets(user.uid, updated);
+    setBudgetTargets(updated);
+    setNewBudgetCategory('');
+    setNewBudgetLimit('');
+    setShowAddBudget(false);
+    setBudgetSaving(false);
+  };
+
+  const handleDeleteBudget = async (category) => {
+    const updated = budgetTargets.filter(b => b.category !== category);
+    await saveBudgets(user.uid, updated);
+    setBudgetTargets(updated);
+  };
+
+  // Recurring template handlers
+  const handleAddTemplate = async () => {
+    if (!templateForm.category && !templateForm.description) return;
+    await addRecurringTemplate(user.uid, templateForm);
+    setTemplateForm({ type: 'expense', category: '', description: '', amount: '', fundingSource: '', label: '' });
+    setShowAddTemplate(false);
+  };
+
   // Excel Import — Parse & Preview
   const handleExcelImport = async (e) => {
     const file = e.target.files[0];
@@ -122,11 +183,10 @@ export default function SettingsPage() {
       console.error('Import error:', err);
       setImportResult({ success: false, message: 'Error reading Excel file. Make sure it\'s a valid .xlsx file.' });
     }
-    // Reset file input
     e.target.value = '';
   };
 
-  // Confirm Import — with real-time progress tracking
+  // Confirm Import
   const confirmImport = async () => {
     if (!importData || !user) return;
     setImporting(true);
@@ -137,12 +197,8 @@ export default function SettingsPage() {
     const grandTotal = importData.summary.total;
 
     const collectionLabel = {
-      transactions: 'Transactions',
-      investments: 'Investments',
-      emergencyFund: 'Emergency Fund',
-      personalLending: 'Personal Lending',
-      loans: 'Loans',
-      goals: 'Goals',
+      transactions: 'Transactions', investments: 'Investments', emergencyFund: 'Emergency Fund',
+      personalLending: 'Personal Lending', loans: 'Loans', goals: 'Goals',
     };
 
     const handleProgress = (collName) => (progress) => {
@@ -189,27 +245,17 @@ export default function SettingsPage() {
     setImportProgress(null);
   };
 
-  // Excel Export — Full data
+  // Excel Export
   const handleExcelExport = async () => {
     setExporting(true);
     try {
       const XLSX = await import('xlsx');
-      
-      // Fetch all data
       const [transactions, investments, emergencyFund, goals, loans, lending] = await Promise.all([
-        getDocuments(user.uid, 'transactions'),
-        getDocuments(user.uid, 'investments'),
-        getDocuments(user.uid, 'emergencyFund'),
-        getDocuments(user.uid, 'goals'),
-        getDocuments(user.uid, 'loans'),
-        getDocuments(user.uid, 'personalLending'),
+        getDocuments(user.uid, 'transactions'), getDocuments(user.uid, 'investments'),
+        getDocuments(user.uid, 'emergencyFund'), getDocuments(user.uid, 'goals'),
+        getDocuments(user.uid, 'loans'), getDocuments(user.uid, 'personalLending'),
       ]);
-
-      const wb = buildExportWorkbook(
-        { transactions, investments, emergencyFund, goals, loans, lending },
-        XLSX
-      );
-      
+      const wb = buildExportWorkbook({ transactions, investments, emergencyFund, goals, loans, lending }, XLSX);
       XLSX.writeFile(wb, `CashOSys_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
       setImportResult({ success: true, message: 'Export downloaded successfully!' });
     } catch (err) {
@@ -235,12 +281,7 @@ export default function SettingsPage() {
         <div className={styles.formGrid}>
           <div className="input-group">
             <label>Display Name</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your name"
-            />
+            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" />
           </div>
           <div className="input-group">
             <label>Email</label>
@@ -249,23 +290,14 @@ export default function SettingsPage() {
           <div className="input-group">
             <label>Profile Picture URL</label>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ 
-                width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-secondary)', 
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' 
-              }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 {photoURL ? (
                   <img src={photoURL} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <User size={24} style={{ color: 'var(--text-tertiary)' }} />
                 )}
               </div>
-              <input
-                type="text"
-                value={photoURL}
-                onChange={(e) => setPhotoURL(e.target.value)}
-                placeholder="https://example.com/photo.png"
-                style={{ flex: 1 }}
-              />
+              <input type="text" value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} placeholder="https://example.com/photo.png" style={{ flex: 1 }} />
             </div>
           </div>
           <div className="input-group">
@@ -276,15 +308,157 @@ export default function SettingsPage() {
               ))}
             </select>
           </div>
+          <div className="input-group">
+            <label>Primary Income Source</label>
+            <select value={primaryIncomeSource} onChange={(e) => setPrimaryIncomeSource(e.target.value)}>
+              {allIncomeSources.map(src => (
+                <option key={src.name} value={src.name}>{src.icon || '💼'} {src.name} ({src.type})</option>
+              ))}
+            </select>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+              Dashboard shows this source's balance for the current salary cycle only. Others show all-time balance.
+            </span>
+          </div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={handleProfileSave}
-          disabled={profileSaving}
-          style={{ marginTop: 'var(--space-4)' }}
-        >
+        <button className="btn btn-primary" onClick={handleProfileSave} disabled={profileSaving} style={{ marginTop: 'var(--space-4)' }}>
           {profileSaved ? '✓ Saved!' : profileSaving ? 'Saving...' : <><Save size={16} /> Save Profile</>}
         </button>
+      </div>
+
+      {/* Vehicle Profile */}
+      <div className="card">
+        <h3 className={styles.sectionTitle}>
+          <Car size={18} />
+          Vehicle Profile
+        </h3>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
+          Used for fuel analytics on the dashboard
+        </p>
+        <div className={styles.formGrid}>
+          <div className="input-group">
+            <label>Vehicle Name</label>
+            <input type="text" value={vehicleName} onChange={(e) => setVehicleName(e.target.value)} placeholder="e.g., Honda Activa" />
+          </div>
+          <div className="input-group">
+            <label>Type</label>
+            <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+              <option value="bike">🏍️ Bike / Scooter</option>
+              <option value="car">🚗 Car</option>
+              <option value="ev">⚡ Electric</option>
+            </select>
+          </div>
+          <div className="input-group">
+            <label>Tank Capacity (Litres)</label>
+            <input type="number" step="0.1" min="0" value={tankCapacity} onChange={(e) => setTankCapacity(e.target.value)} placeholder="e.g., 5.3" />
+          </div>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 'var(--space-2)' }}>
+          Saved with your profile when you click "Save Profile" above.
+        </p>
+      </div>
+
+      {/* Budget Targets */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+          <h3 className={styles.sectionTitle} style={{ marginBottom: 0 }}>
+            <Target size={18} />
+            Monthly Budget Targets
+          </h3>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddBudget(true)}>
+            <Plus size={14} /> Add Target
+          </button>
+        </div>
+        {budgetTargets.length > 0 ? (
+          <div className={styles.sourceList}>
+            {budgetTargets.map(b => (
+              <div key={b.category} className={styles.sourceItem}>
+                <span className={styles.sourceIcon}>{DEFAULT_EXPENSE_CATEGORIES.find(c => c.name === b.category)?.icon || '📌'}</span>
+                <div className={styles.sourceInfo}>
+                  <span style={{ fontWeight: 600 }}>{b.category}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>{formatCurrency(b.limit)} / month</span>
+                </div>
+                <button className="btn btn-ghost btn-icon-sm" onClick={() => handleDeleteBudget(b.category)} style={{ color: 'var(--text-tertiary)' }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No budget targets set. Add one to track spending limits.</p>
+        )}
+        {showAddBudget && (
+          <div className={styles.addSourceForm}>
+            <select value={newBudgetCategory} onChange={(e) => setNewBudgetCategory(e.target.value)} style={{ flex: 1 }}>
+              <option value="">Select category...</option>
+              {DEFAULT_EXPENSE_CATEGORIES.filter(c => !budgetTargets.find(b => b.category === c.name)).map(c => (
+                <option key={c.name} value={c.name}>{c.icon} {c.name}</option>
+              ))}
+            </select>
+            <input type="number" placeholder="₹ Limit" value={newBudgetLimit} onChange={(e) => setNewBudgetLimit(e.target.value)} style={{ width: 120 }} />
+            <button className="btn btn-primary btn-sm" onClick={handleAddBudget} disabled={budgetSaving}>Add</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowAddBudget(false)}><X size={14} /></button>
+          </div>
+        )}
+      </div>
+
+      {/* Recurring Templates (Quick Select) */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+          <h3 className={styles.sectionTitle} style={{ marginBottom: 0 }}>
+            <Zap size={18} />
+            Quick Select Templates
+          </h3>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTemplate(true)}>
+            <Plus size={14} /> Add
+          </button>
+        </div>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
+          Pre-fill transactions on the Add page. Just select a template, enter amount & date, and submit.
+        </p>
+        {recurringTemplates.length > 0 ? (
+          <div className={styles.sourceList}>
+            {recurringTemplates.map(t => (
+              <div key={t.id} className={styles.sourceItem}>
+                <span className={styles.sourceIcon}>{t.icon || '📌'}</span>
+                <div className={styles.sourceInfo}>
+                  <span style={{ fontWeight: 600 }}>{t.label || t.description || t.category}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                    {t.type} • {t.category}{t.amount ? ` • ${formatCurrency(t.amount)}` : ''}
+                  </span>
+                </div>
+                <button className="btn btn-ghost btn-icon-sm" onClick={() => deleteRecurringTemplate(user.uid, t.id)} style={{ color: 'var(--text-tertiary)' }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No templates yet. Add recurring transactions for quick entry.</p>
+        )}
+        {showAddTemplate && (
+          <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <select value={templateForm.type} onChange={e => setTemplateForm({ ...templateForm, type: e.target.value })} style={{ width: 120 }}>
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+              </select>
+              <input placeholder="Label (e.g., Monthly Rent)" value={templateForm.label} onChange={e => setTemplateForm({ ...templateForm, label: e.target.value })} style={{ flex: 1 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <select value={templateForm.category} onChange={e => setTemplateForm({ ...templateForm, category: e.target.value })} style={{ flex: 1 }}>
+                <option value="">Category...</option>
+                {(templateForm.type === 'expense' ? DEFAULT_EXPENSE_CATEGORIES : DEFAULT_INCOME_SOURCES).map(c => (
+                  <option key={c.name} value={c.name}>{c.icon} {c.name}</option>
+                ))}
+              </select>
+              <input type="number" placeholder="₹ Amount (optional)" value={templateForm.amount} onChange={e => setTemplateForm({ ...templateForm, amount: e.target.value })} style={{ width: 150 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddTemplate(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleAddTemplate}>Add Template</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Theme */}
@@ -321,11 +495,7 @@ export default function SettingsPage() {
                   <span style={{ fontWeight: 600 }}>{source.name}</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{source.type}</span>
                 </div>
-                <button
-                  className="btn btn-ghost btn-icon-sm"
-                  onClick={() => handleDeleteSource(source.id)}
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
+                <button className="btn btn-ghost btn-icon-sm" onClick={() => handleDeleteSource(source.id)} style={{ color: 'var(--text-tertiary)' }}>
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -338,13 +508,7 @@ export default function SettingsPage() {
         </div>
         {showAddSource && (
           <div className={styles.addSourceForm}>
-            <input
-              type="text"
-              placeholder="Source name"
-              value={newSourceName}
-              onChange={(e) => setNewSourceName(e.target.value)}
-              style={{ flex: 1 }}
-            />
+            <input type="text" placeholder="Source name" value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} style={{ flex: 1 }} />
             <select value={newSourceType} onChange={(e) => setNewSourceType(e.target.value)} style={{ width: '120px' }}>
               <option value="salary">Salary</option>
               <option value="freelance">Freelance</option>
@@ -363,7 +527,6 @@ export default function SettingsPage() {
       <div className="card">
         <h3 className={styles.sectionTitle}>Data Management</h3>
 
-        {/* Result notification */}
         {importResult && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
@@ -385,33 +548,20 @@ export default function SettingsPage() {
             <Upload size={20} style={{ color: 'var(--accent-green)' }} />
             <div>
               <p style={{ fontWeight: 600 }}>Import from Excel</p>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                Upload your .xlsx finance tracker
-              </p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Upload your .xlsx finance tracker</p>
             </div>
             <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
               <Upload size={14} /> Browse
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleExcelImport}
-                style={{ display: 'none' }}
-              />
+              <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} style={{ display: 'none' }} />
             </label>
           </div>
           <div className={styles.dataAction}>
             <Download size={20} style={{ color: 'var(--accent-gold)' }} />
             <div>
               <p style={{ fontWeight: 600 }}>Export to Excel</p>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                Download all your data as .xlsx
-              </p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Download all your data as .xlsx</p>
             </div>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={handleExcelExport}
-              disabled={exporting}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={handleExcelExport} disabled={exporting}>
               <Download size={14} /> {exporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
@@ -419,16 +569,9 @@ export default function SettingsPage() {
             <Trash2 size={20} style={{ color: 'var(--error)' }} />
             <div>
               <p style={{ fontWeight: 600, color: 'var(--error)' }}>Clear All Data</p>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                Permanently delete all your subcollections (transactions, investments, etc.)
-              </p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Permanently delete all your subcollections</p>
             </div>
-            <button
-              className="btn btn-sm"
-              style={{ background: 'var(--error-bg)', color: 'var(--error)' }}
-              onClick={handleClearData}
-              disabled={isClearing}
-            >
+            <button className="btn btn-sm" style={{ background: 'var(--error-bg)', color: 'var(--error)' }} onClick={handleClearData} disabled={isClearing}>
               {isClearing ? 'Clearing...' : 'Clear Data'}
             </button>
           </div>
@@ -454,9 +597,7 @@ export default function SettingsPage() {
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '540px' }}>
             <div className="modal-header">
               <h2>Import Preview</h2>
-              <button className="btn btn-ghost btn-icon-sm" onClick={() => setImportData(null)}>
-                <X size={18} />
-              </button>
+              <button className="btn btn-ghost btn-icon-sm" onClick={() => setImportData(null)}><X size={18} /></button>
             </div>
             <div className="modal-body">
               <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-4)', fontSize: '0.875rem' }}>
@@ -474,8 +615,7 @@ export default function SettingsPage() {
                 ].filter(item => item.count > 0).map(item => (
                   <div key={item.label} style={{
                     display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-                    padding: 'var(--space-3)', background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-3)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
                   }}>
                     <span>{item.icon}</span>
                     <div>
@@ -485,15 +625,9 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              
-              <div style={{
-                marginTop: 'var(--space-4)', padding: 'var(--space-3)',
-                background: 'var(--success-bg)', borderRadius: 'var(--radius-md)',
-                fontSize: '0.875rem', fontWeight: 600, textAlign: 'center',
-              }}>
+              <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--success-bg)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center' }}>
                 Total: {importData.summary.total} records ready to import
               </div>
-
               {importData.errors.length > 0 && (
                 <div style={{ marginTop: 'var(--space-3)', fontSize: '0.75rem', color: 'var(--warning)' }}>
                   ⚠️ {importData.errors.length} rows skipped due to parsing errors
@@ -504,12 +638,8 @@ export default function SettingsPage() {
               {importing && importProgress && (
                 <div style={{ width: '100%' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: 6 }}>
-                    <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
-                      Importing {importProgress.collection}...
-                    </span>
-                    <span style={{ fontWeight: 700, color: 'var(--accent-green)' }}>
-                      {importProgress.percent}%
-                    </span>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Importing {importProgress.collection}...</span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent-green)' }}>{importProgress.percent}%</span>
                   </div>
                   <div className="progress-bar" style={{ height: 8 }}>
                     <div className="progress-bar-fill" style={{ width: `${importProgress.percent}%`, transition: 'width 0.3s' }} />
@@ -523,11 +653,7 @@ export default function SettingsPage() {
                 <button className="btn btn-secondary" onClick={() => setImportData(null)} disabled={importing}>
                   {importing ? 'Please wait...' : 'Cancel'}
                 </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={confirmImport}
-                  disabled={importing || importData.summary.total === 0}
-                >
+                <button className="btn btn-primary" onClick={confirmImport} disabled={importing || importData.summary.total === 0}>
                   {importing ? `Importing... ${importProgress?.percent || 0}%` : `Import ${importData.summary.total} Records`}
                 </button>
               </div>
@@ -538,4 +664,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

@@ -63,7 +63,8 @@ export default function ExpensesPage() {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(t =>
         t.description?.toLowerCase().includes(term) ||
-        t.category?.toLowerCase().includes(term)
+        t.category?.toLowerCase().includes(term) ||
+        (Array.isArray(t.tags) && t.tags.some(tag => tag.toLowerCase().includes(term)))
       );
     }
     if (filterCategory) filtered = filtered.filter(t => t.category === filterCategory);

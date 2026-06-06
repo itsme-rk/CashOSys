@@ -42,8 +42,10 @@ export function getDashboardData({
   incomeDates,
   selectedCycleId,
   getCycleForDate,
+  primaryIncomeSource = 'Income',
+  budgetTargets = [],
 }) {
-  const key = makeCacheKey(transactions, investments, efEntries, goals, loans, lending) + '|' + selectedCycleId;
+  const key = makeCacheKey(transactions, investments, efEntries, goals, loans, lending) + '|' + selectedCycleId + '|' + primaryIncomeSource;
   if (_cache && _cacheKey === key) return _cache;
 
   // ── Cycle-filtered transactions ────────────────────────────────────────────
@@ -88,7 +90,48 @@ export function getDashboardData({
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(-6);
 
-  // ── Per-source balance ─────────────────────────────────────────────────────
+  // ── Per-source balance cards ───────────────────────────────────────────────
+  // Gather all known income sources from transactions
+  const allSourceNames = new Set();
+  transactions.forEach(t => {
+    if (t.type === 'income' && t.category) allSourceNames.add(t.category);
+  });
+  // Always include the primary
+  allSourceNames.add(primaryIncomeSource);
+
+  const sourceBalanceCards = [];
+  allSourceNames.forEach(sourceName => {
+    const isPrimary = sourceName === primaryIncomeSource;
+
+    // Primary = current cycle only; others = all-time cumulative
+    const pool = isPrimary ? cycleTransactions : transactions;
+
+    const sourceIncome = pool
+      .filter(t => t.type === 'income' && t.category === sourceName)
+      .reduce((s, t) => s + (t.amount || 0), 0);
+
+    const sourceExpenses = pool
+      .filter(t => t.type === 'expense' && t.fundingSource === sourceName)
+      .reduce((s, t) => s + (t.amount || 0), 0);
+
+    sourceBalanceCards.push({
+      name: sourceName,
+      isPrimary,
+      income: sourceIncome,
+      expenses: sourceExpenses,
+      balance: sourceIncome - sourceExpenses,
+      label: isPrimary ? 'This Cycle' : 'All Time',
+    });
+  });
+
+  // Sort: primary first, then by balance descending
+  sourceBalanceCards.sort((a, b) => {
+    if (a.isPrimary && !b.isPrimary) return -1;
+    if (!a.isPrimary && b.isPrimary) return 1;
+    return b.balance - a.balance;
+  });
+
+  // ── Legacy sourceBalances (kept for compatibility) ─────────────────────────
   const sourceBalances = {};
   incomeEntries.forEach(t => {
     const src = t.category || 'Income';
@@ -129,31 +172,96 @@ export function getDashboardData({
   // ── Recent transactions ────────────────────────────────────────────────────
   const recentTransactions = cycleTransactions.slice(0, 10);
 
-  // ── Fuel stats ────────────────────────────────────────────────────────────
-  const fuelEntries = expenseEntries.filter(t =>
-    t.category?.toLowerCase() === 'fuel' && t.litres > 0
+  // ── Fuel stats — Rolling 3-month window ────────────────────────────────────
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const allFuelEntries = transactions.filter(t =>
+    t.type === 'expense' &&
+    t.category?.toLowerCase() === 'fuel' &&
+    t.litres > 0 &&
+    new Date(t.date) >= threeMonthsAgo
   );
+
   let fuelStats = null;
-  if (fuelEntries.length > 0) {
-    const totalFuelSpend = fuelEntries.reduce((s, t) => s + (t.amount || 0), 0);
-    const totalLitres    = fuelEntries.reduce((s, t) => s + (t.litres  || 0), 0);
-    const sortedFuel     = [...fuelEntries].sort((a, b) => a.date.localeCompare(b.date));
-    let totalMileage = 0, mileageCount = 0;
+  if (allFuelEntries.length > 0) {
+    const totalFuelSpend = allFuelEntries.reduce((s, t) => s + (t.amount || 0), 0);
+    const totalLitres    = allFuelEntries.reduce((s, t) => s + (t.litres  || 0), 0);
+    const sortedFuel     = [...allFuelEntries].sort((a, b) => a.date.localeCompare(b.date));
+
+    // Compute mileage from consecutive odometer readings
+    let totalKmTraveled = 0;
+    let mileageReadings = [];
     for (let i = 1; i < sortedFuel.length; i++) {
       const prev = sortedFuel[i - 1];
       const curr = sortedFuel[i];
       if (curr.odometerReading && prev.odometerReading && curr.litres) {
         const km = curr.odometerReading - prev.odometerReading;
-        if (km > 0) { totalMileage += km / curr.litres; mileageCount++; }
+        if (km > 0) {
+          totalKmTraveled += km;
+          mileageReadings.push(km / curr.litres);
+        }
       }
     }
+    const avgMileage = mileageReadings.length > 0
+      ? mileageReadings.reduce((s, v) => s + v, 0) / mileageReadings.length
+      : null;
+    const costPerKm = totalKmTraveled > 0 ? totalFuelSpend / totalKmTraveled : null;
+
+    // Per-month breakdown
+    const monthlyMap = {};
+    allFuelEntries.forEach(t => {
+      const d = new Date(t.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[key]) monthlyMap[key] = { spend: 0, litres: 0, refills: 0 };
+      monthlyMap[key].spend += t.amount || 0;
+      monthlyMap[key].litres += t.litres || 0;
+      monthlyMap[key].refills += 1;
+    });
+    const monthlyBreakdown = Object.entries(monthlyMap)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, data]) => {
+        const [y, m] = key.split('-');
+        const label = new Date(parseInt(y), parseInt(m) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        return { month: label, ...data };
+      });
+
     fuelStats = {
       totalSpend: totalFuelSpend,
       totalLitres,
-      avgMileage: mileageCount > 0 ? totalMileage / mileageCount : null,
-      costPerKm:  mileageCount > 0 ? totalFuelSpend / (totalMileage * mileageCount) : null,
-      entries:    fuelEntries.length,
+      avgMileage,
+      costPerKm,
+      entries: allFuelEntries.length,
+      totalKmTraveled,
+      monthlyBreakdown,
     };
+  }
+
+  // ── Budget vs Actual ──────────────────────────────────────────────────────
+  const budgetComparison = budgetTargets.map(b => {
+    const spent = categoryBreakdown[b.category] || 0;
+    const pct = b.limit > 0 ? (spent / b.limit) * 100 : 0;
+    return {
+      category: b.category,
+      limit: b.limit,
+      spent,
+      remaining: b.limit - spent,
+      percent: Math.min(pct, 100),
+      isOver: spent > b.limit,
+    };
+  });
+
+  // ── Savings Streak ────────────────────────────────────────────────────────
+  // How many consecutive cycles (most recent first) had savings > 0
+  const allCycleIds = Object.keys(monthMap).sort().reverse();
+  let savingsStreak = 0;
+  for (const cid of allCycleIds) {
+    const m = monthMap[cid];
+    if ((m.income - m.expenses) > 0) {
+      savingsStreak++;
+    } else {
+      break;
+    }
   }
 
   const netWorth = savings + totalCurrentVal + efBalance + totalGoalSaved - totalLoanRemaining;
@@ -161,13 +269,15 @@ export function getDashboardData({
   _cache = {
     totalIncome, totalExpenses, savings, savingsRate, netWorth,
     categoryBreakdown, categoryChartData, trendData,
-    sourceBalances,
+    sourceBalances, sourceBalanceCards,
     totalInvested, totalCurrentVal, investmentGain,
     efBalance, efMonths,
     totalGoalTarget, totalGoalSaved,
     totalLoanRemaining, totalLendingOutstanding,
     recentTransactions,
     fuelStats,
+    budgetComparison,
+    savingsStreak,
   };
   _cacheKey = key;
   return _cache;

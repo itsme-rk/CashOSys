@@ -8,6 +8,7 @@ import {
   addInvestment,
   subscribeIncomeSources,
   subscribeCategories,
+  subscribeRecurringTemplates,
 } from '@/lib/firestore';
 import { getCycleForDate } from '@/lib/salaryCycle';
 import {
@@ -18,7 +19,7 @@ import {
 } from '@/lib/constants';
 import {
   ArrowLeft, Check, TrendingUp, TrendingDown, ToggleLeft, ToggleRight,
-  Plus, X,
+  Plus, X, Zap, Split, Tag,
 } from 'lucide-react';
 import Link from 'next/link';
 import styles from './add.module.css';
@@ -46,13 +47,25 @@ export default function AddTransactionPage() {
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  // Quick Select templates
+  const [templates, setTemplates] = useState([]);
+  const [showQuickSelect, setShowQuickSelect] = useState(true);
+
+  // Tags
+  const [tags, setTags] = useState('');
+
+  // Expense Splitting
+  const [isSplit, setIsSplit] = useState(false);
+  const [splits, setSplits] = useState([{ category: '', amount: '' }]);
+
   const salaryCycleDay = userProfile?.salaryCycleDay || 28;
 
   useEffect(() => {
     if (!user) return;
     const unsub1 = subscribeCategories(user.uid, setCustomCategories);
     const unsub2 = subscribeIncomeSources(user.uid, setCustomSources);
-    return () => { unsub1(); unsub2(); };
+    const unsub3 = subscribeRecurringTemplates(user.uid, setTemplates);
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, [user]);
 
   const allExpenseCategories = [
@@ -65,8 +78,76 @@ export default function AddTransactionPage() {
     ...customSources,
   ];
 
+  // Apply a quick-select template
+  const applyTemplate = (template) => {
+    setType(template.type || 'expense');
+    setCategory(template.category || '');
+    setDescription(template.description || '');
+    if (template.amount) setAmount(String(template.amount));
+    if (template.fundingSource) setFundingSource(template.fundingSource);
+    setShowQuickSelect(false);
+  };
+
+  // Splitting helpers
+  const updateSplit = (index, field, value) => {
+    const updated = [...splits];
+    updated[index] = { ...updated[index], [field]: value };
+    setSplits(updated);
+  };
+
+  const addSplitRow = () => {
+    setSplits([...splits, { category: '', amount: '' }]);
+  };
+
+  const removeSplitRow = (index) => {
+    if (splits.length > 1) {
+      setSplits(splits.filter((_, i) => i !== index));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // If splitting, validate splits
+    if (isSplit && type === 'expense') {
+      const totalSplit = splits.reduce((s, sp) => s + (parseFloat(sp.amount) || 0), 0);
+      if (totalSplit <= 0) {
+        setError('Please fill in split amounts');
+        return;
+      }
+      // Submit each split as a separate transaction
+      setLoading(true);
+      setError('');
+      try {
+        const cycle = getCycleForDate(date, salaryCycleDay);
+        for (const sp of splits) {
+          if (!sp.category || !sp.amount) continue;
+          await addTransaction(user.uid, {
+            type: 'expense',
+            subType: '',
+            category: sp.category,
+            description: description || `Split: ${sp.category}`,
+            amount: parseFloat(sp.amount),
+            date,
+            fundingSource,
+            salaryCycleId: cycle.id,
+            salaryCycleLabel: cycle.label,
+            isInvestment: false,
+            tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+          });
+        }
+        setSuccess(true);
+        setTimeout(() => {
+          resetForm();
+          setSuccess(false);
+        }, 1500);
+      } catch (err) {
+        setError(err.message || 'Failed to add split transactions');
+      }
+      setLoading(false);
+      return;
+    }
+
     if (!amount || !category) {
       setError('Please fill in all required fields');
       return;
@@ -80,8 +161,8 @@ export default function AddTransactionPage() {
 
       const computedSubType = subType || (type === 'income' ? 'salary' : (type === 'refund' ? 'refund_repay' : ''));
       const txData = {
-        type: type === 'refund' ? 'income' : type, // Structural type is income so it increases balance
-        subType: computedSubType, // Keeps 'refund_repay' label so Dashboard can exclude it from Salary
+        type: type === 'refund' ? 'income' : type,
+        subType: computedSubType,
         category,
         description,
         amount: parseFloat(amount),
@@ -90,15 +171,13 @@ export default function AddTransactionPage() {
         salaryCycleId: cycle.id,
         salaryCycleLabel: cycle.label,
         isInvestment,
-        // Fuel fields
         litres: category === 'Fuel' && litres ? parseFloat(litres) : null,
         odometerReading: category === 'Fuel' && odometerReading ? parseFloat(odometerReading) : null,
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
       };
 
-      // Add transaction
       const tx = await addTransaction(user.uid, txData);
 
-      // Also add investment if toggled
       if (isInvestment && type === 'expense') {
         await addInvestment(user.uid, {
           bucket: investmentBucket || category,
@@ -114,23 +193,30 @@ export default function AddTransactionPage() {
 
       setSuccess(true);
       setTimeout(() => {
-        // Reset form
-        setCategory('');
-        setDescription('');
-        setAmount('');
-        setFundingSource('');
-        setIsInvestment(false);
-        setInvestmentBucket('');
-        setInvestmentTicker('');
-        setSubType('');
-        setLitres('');
-        setOdometerReading('');
+        resetForm();
         setSuccess(false);
       }, 1500);
     } catch (err) {
       setError(err.message || 'Failed to add transaction');
     }
     setLoading(false);
+  };
+
+  const resetForm = () => {
+    setCategory('');
+    setDescription('');
+    setAmount('');
+    setFundingSource('');
+    setIsInvestment(false);
+    setInvestmentBucket('');
+    setInvestmentTicker('');
+    setSubType('');
+    setLitres('');
+    setOdometerReading('');
+    setTags('');
+    setIsSplit(false);
+    setSplits([{ category: '', amount: '' }]);
+    setShowQuickSelect(true);
   };
 
   return (
@@ -141,6 +227,35 @@ export default function AddTransactionPage() {
         </Link>
         <h1>Add Transaction</h1>
       </div>
+
+      {/* Quick Select Templates */}
+      {showQuickSelect && templates.length > 0 && (
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Zap size={16} style={{ color: 'var(--accent-gold)' }} />
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Quick Select</span>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            {templates.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => applyTemplate(t)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 14px', borderRadius: 'var(--radius-full)',
+                  background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+                  fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)',
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                <span>{t.icon || '📌'}</span>
+                {t.label || t.category}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Type Toggle */}
       <div className={styles.typeToggle}>
@@ -173,50 +288,122 @@ export default function AddTransactionPage() {
 
       <form onSubmit={handleSubmit} className={styles.form}>
         {/* Amount */}
-        <div className={styles.amountSection}>
-          <span className={styles.currencySign}>₹</span>
-          <input
-            id="add-amount"
-            type="number"
-            className={styles.amountInput}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            step="0.01"
-            min="0"
-            required
-            autoFocus
-          />
-        </div>
+        {!isSplit && (
+          <div className={styles.amountSection}>
+            <span className={styles.currencySign}>₹</span>
+            <input
+              id="add-amount"
+              type="number"
+              className={styles.amountInput}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+              step="0.01"
+              min="0"
+              required={!isSplit}
+              autoFocus
+            />
+          </div>
+        )}
 
         {/* Category */}
-        <div className={styles.field}>
-          <label htmlFor="add-category">
-            {type === 'income' ? 'Source' : type === 'refund' ? 'Refund Type' : 'Category'}
-          </label>
-          <div className={styles.categoryGrid}>
-            {(type === 'expense' ? allExpenseCategories : type === 'income' ? allIncomeSources : DEFAULT_REFUND_SOURCES).map((cat) => (
+        {!isSplit && (
+          <div className={styles.field}>
+            <label htmlFor="add-category">
+              {type === 'income' ? 'Source' : type === 'refund' ? 'Refund Type' : 'Category'}
+            </label>
+            <div className={styles.categoryGrid}>
+              {(type === 'expense' ? allExpenseCategories : type === 'income' ? allIncomeSources : DEFAULT_REFUND_SOURCES).map((cat) => (
+                <button
+                  key={cat.name}
+                  type="button"
+                  className={`${styles.categoryChip} ${category === cat.name ? styles.categoryActive : ''}`}
+                  onClick={() => setCategory(cat.name)}
+                  style={category === cat.name ? { borderColor: cat.color, background: `${cat.color}15` } : {}}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.name}</span>
+                </button>
+              ))}
               <button
-                key={cat.name}
                 type="button"
-                className={`${styles.categoryChip} ${category === cat.name ? styles.categoryActive : ''}`}
-                onClick={() => setCategory(cat.name)}
-                style={category === cat.name ? { borderColor: cat.color, background: `${cat.color}15` } : {}}
+                className={styles.categoryChip}
+                onClick={() => setShowNewCategory(true)}
               >
-                <span>{cat.icon}</span>
-                <span>{cat.name}</span>
+                <Plus size={14} />
+                <span>New</span>
               </button>
-            ))}
-            <button
-              type="button"
-              className={styles.categoryChip}
-              onClick={() => setShowNewCategory(true)}
-            >
-              <Plus size={14} />
-              <span>New</span>
-            </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Expense Splitting Toggle */}
+        {type === 'expense' && !isSplit && (
+          <button
+            type="button"
+            onClick={() => { setIsSplit(true); setAmount(''); setCategory(''); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+              borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)',
+              background: 'transparent', color: 'var(--text-secondary)',
+              fontSize: '0.8125rem', cursor: 'pointer', width: '100%',
+            }}
+          >
+            <Split size={16} /> Split this expense across categories
+          </button>
+        )}
+
+        {/* Split Mode */}
+        {isSplit && type === 'expense' && (
+          <div className={styles.field}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ margin: 0 }}>
+                <Split size={14} style={{ marginRight: 6 }} />
+                Expense Splits
+              </label>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setIsSplit(false); setSplits([{ category: '', amount: '' }]); }}>
+                <X size={14} /> Cancel Split
+              </button>
+            </div>
+            {splits.map((sp, i) => (
+              <div key={i} style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', alignItems: 'center' }}>
+                <select
+                  value={sp.category}
+                  onChange={(e) => updateSplit(i, 'category', e.target.value)}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Category...</option>
+                  {allExpenseCategories.map(c => (
+                    <option key={c.name} value={c.name}>{c.icon} {c.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  placeholder="₹ Amount"
+                  value={sp.amount}
+                  onChange={(e) => updateSplit(i, 'amount', e.target.value)}
+                  style={{ width: 120 }}
+                  step="0.01"
+                  min="0"
+                />
+                {splits.length > 1 && (
+                  <button type="button" onClick={() => removeSplitRow(i)} style={{ color: 'var(--text-tertiary)', padding: 4 }}>
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addSplitRow} style={{
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8125rem',
+              color: 'var(--accent-green)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0',
+            }}>
+              <Plus size={14} /> Add another split
+            </button>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+              Total: ₹{splits.reduce((s, sp) => s + (parseFloat(sp.amount) || 0), 0).toFixed(2)}
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div className={styles.field}>
@@ -239,6 +426,21 @@ export default function AddTransactionPage() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
+          />
+        </div>
+
+        {/* Tags (optional) */}
+        <div className={styles.field}>
+          <label htmlFor="add-tags" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Tag size={14} />
+            Tags <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(optional, comma-separated)</span>
+          </label>
+          <input
+            id="add-tags"
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="e.g., trip, birthday, office"
           />
         </div>
 
@@ -269,7 +471,7 @@ export default function AddTransactionPage() {
         )}
 
         {/* Investment Toggle */}
-        {type === 'expense' && (
+        {type === 'expense' && !isSplit && (
           <div className={styles.investmentToggle}>
             <div className={styles.toggleInfo}>
               <span className={styles.toggleLabel}>Also an Investment?</span>
@@ -314,7 +516,7 @@ export default function AddTransactionPage() {
           </div>
         )}
 
-        {/* Fuel tracker fields — shown only when Fuel category is selected */}
+        {/* Fuel tracker fields */}
         {type === 'expense' && category === 'Fuel' && (
           <div className={styles.investmentFields}>
             <div className={styles.field}>
@@ -359,7 +561,7 @@ export default function AddTransactionPage() {
           ) : loading ? (
             <div className={styles.spinner} />
           ) : (
-            `Add ${type === 'expense' ? 'Expense' : 'Income'}`
+            `Add ${type === 'expense' ? (isSplit ? 'Split Expense' : 'Expense') : 'Income'}`
           )}
         </button>
       </form>
