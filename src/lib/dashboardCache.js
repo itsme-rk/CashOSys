@@ -114,6 +114,21 @@ export function getDashboardData({
       .filter(t => t.type === 'expense' && t.fundingSource === sourceName)
       .reduce((s, t) => s + (t.amount || 0), 0);
 
+    let carryOver = 0;
+    let netBalance = 0;
+
+    if (isPrimary) {
+      const allTimePrimaryIncome = transactions
+        .filter(t => t.type === 'income' && t.category === sourceName)
+        .reduce((s, t) => s + (t.amount || 0), 0);
+      const allTimePrimaryExpenses = transactions
+        .filter(t => t.type === 'expense' && t.fundingSource === sourceName)
+        .reduce((s, t) => s + (t.amount || 0), 0);
+      
+      netBalance = allTimePrimaryIncome - allTimePrimaryExpenses;
+      carryOver = netBalance - (sourceIncome - sourceExpenses);
+    }
+
     sourceBalanceCards.push({
       name: sourceName,
       isPrimary,
@@ -121,6 +136,8 @@ export function getDashboardData({
       expenses: sourceExpenses,
       balance: sourceIncome - sourceExpenses,
       label: isPrimary ? 'This Cycle' : 'All Time',
+      carryOver: isPrimary ? carryOver : null,
+      netBalance: isPrimary ? netBalance : null,
     });
   });
 

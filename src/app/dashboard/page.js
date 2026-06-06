@@ -194,6 +194,19 @@ export default function DashboardPage() {
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: src.balance >= 0 ? 'var(--accent-green)' : 'var(--error)', marginBottom: 4 }}>
                 {formatCurrency(src.balance)}
               </div>
+              {src.isPrimary && src.carryOver !== null && (
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ color: src.carryOver >= 0 ? 'var(--accent-green)' : 'var(--error)', fontWeight: 600 }}>
+                      {src.carryOver >= 0 ? '+' : ''}{formatCurrency(src.carryOver)}
+                    </span>
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)' }}>carry-over</span>
+                  </div>
+                  <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px dashed var(--border-color)', fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9375rem' }}>
+                    Net: {formatCurrency(src.netBalance)}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                 <span>In: {formatCurrency(src.income)}</span>
                 <span>Out: {formatCurrency(src.expenses)}</span>
